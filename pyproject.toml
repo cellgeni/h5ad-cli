@@ -1,5 +1,5 @@
 [project]
-name = "h5ad-cli"
+name = "h5ad"
 version = "0.1.0"
 description = "Streaming CLI utilities for exploring large AnnData .h5ad files"
 readme = "README.md"
