@@ -1,7 +1,7 @@
 [project]
-name = "h5ad"
+name = "h5ad-cli"
 version = "0.1.0"
-description = "Add your description here"
+description = "Streaming CLI utilities for exploring large AnnData .h5ad files"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
