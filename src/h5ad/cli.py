@@ -4,12 +4,13 @@ from pathlib import Path
 from typing import Optional, Sequence, Tuple, Dict, List
 
 import rich
+from rich.console import Console
 import typer
 import h5py
 import numpy as np
 
 app = typer.Typer(help="Streaming CLI for huge .h5ad files (info, ls, table, matrix, subset-obs-range).")
-
+console = Console(stderr=True)
 
 def open_file(path: Path) -> h5py.File:
     """Open an h5ad file in read-only mode."""
@@ -198,16 +199,18 @@ def table(
         try:
             writer.writerow(col_names)
             cat_cache: Dict[int, np.ndarray] = {}
-            for start in range(0, n_rows, chunk_rows):
-                end = min(start + chunk_rows, n_rows)
-                cols_data: List[List[str]] = []
-                # Read each column for the current chunk
-                for col in col_names:
-                    cols_data.append(_col_chunk_as_strings(group, col, start, end, cat_cache))
-                # Write rows
-                for row_idx in range(end - start):
-                    row = [cols_data[col_idx][row_idx] for col_idx in range(len(col_names))]
-                    writer.writerow(row)
+            with console.status(f"[magenta]Exporting {axis} table...[/] to {'stdout' if out_fh is sys.stdout else out}") as status:
+                for start in range(0, n_rows, chunk_rows):
+                    end = min(start + chunk_rows, n_rows)
+                    status.update(f"[magenta]Exporting rows {start}-{end} of {n_rows}...[/]")
+                    cols_data: List[List[str]] = []
+                    # Read each column for the current chunk
+                    for col in col_names:
+                        cols_data.append(_col_chunk_as_strings(group, col, start, end, cat_cache))
+                    # Write rows
+                    for row_idx in range(end - start):
+                        row = [cols_data[col_idx][row_idx] for col_idx in range(len(col_names))]
+                        writer.writerow(row)
         finally:
             if out_fh is not sys.stdout:
                 out_fh.close()
