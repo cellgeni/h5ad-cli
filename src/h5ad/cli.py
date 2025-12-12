@@ -173,7 +173,10 @@ def table(
     ),
     axis: str = typer.Option("obs", help="Axis to read from ('obs' or 'var')"),
     columns: Optional[str] = typer.Option(
-        None, "--cols", "-c", help="Columns to include in the output table"
+        None,
+        "--cols",
+        "-c",
+        help="Comma separated column names to include in the output table",
     ),
     out: Optional[Path] = typer.Option(
         None, "--out", "-o", help="Output file path (defaults to stdout)", writable=True
