@@ -66,7 +66,14 @@ def _decode_str_array(array: np.ndarray) -> np.ndarray:
 
 
 @app.command()
-def info(file: Path = typer.Argument(..., help="Path to the .h5ad file")) -> None:
+def info(
+    file: Path = typer.Argument(
+        ...,
+        help="Path to the .h5ad file",
+        exists=True,
+        readable=True,
+    )
+) -> None:
     """
     Show high-level information about the .h5ad file.
     """
@@ -158,16 +165,24 @@ def _col_chunk_as_strings(
 
 @app.command()
 def table(
-    file: Path = typer.Argument(..., help="Path to the .h5ad file"),
+    file: Path = typer.Argument(
+        ...,
+        help="Path to the .h5ad file",
+        exists=True,
+        readable=True,
+    ),
     axis: str = typer.Option("obs", help="Axis to read from ('obs' or 'var')"),
     columns: Optional[str] = typer.Option(
         None, "--cols", "-c", help="Columns to include in the output table"
     ),
     out: Optional[Path] = typer.Option(
-        None, "--out", "-o", help="Output file path (defaults to stdout)"
+        None, "--out", "-o", help="Output file path (defaults to stdout)", writable=True
     ),
     chunk_rows: int = typer.Option(
         10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
+    ),
+    head: Optional[int] = typer.Option(
+        None, "--head", "-n", help="Output only the first n rows"
     ),
 ) -> None:
     """
@@ -206,6 +221,10 @@ def table(
             col_names = [index_name] + col_names
         else:
             col_names = [index_name] + [c for c in col_names if c != index_name]
+
+        # Limit rows if head option is specified
+        if head is not None and head > 0:
+            n_rows = min(n_rows, head)
 
         # Open writer
         if out is None or str(out) == "-":
