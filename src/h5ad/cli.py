@@ -174,12 +174,16 @@ def table(
     axis: str = typer.Option("obs", help="Axis to read from ('obs' or 'var')"),
     columns: Optional[str] = typer.Option(
         None,
-        "--cols",
+        "--columns",
         "-c",
         help="Comma separated column names to include in the output table",
     ),
     out: Optional[Path] = typer.Option(
-        None, "--out", "-o", help="Output file path (defaults to stdout)", writable=True
+        None,
+        "--output",
+        "-o",
+        help="Output file path (defaults to stdout)",
+        writable=True,
     ),
     chunk_rows: int = typer.Option(
         10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
