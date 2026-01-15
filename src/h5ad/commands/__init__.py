@@ -1,0 +1,1 @@
+from h5ad.commands.info import show_info
