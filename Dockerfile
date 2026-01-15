@@ -14,8 +14,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 
-# Clone the repo into /app
-RUN git clone --branch 0.1.0 https://github.com/cellgeni/h5ad-cli.git .
+# Copy the project files (from GitHub Actions checkout context)
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
 
 
 # Install the project according to pyproject.toml + uv.lock
