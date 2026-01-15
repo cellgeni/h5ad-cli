@@ -22,9 +22,11 @@ def show_info(file: Path, console: Console) -> None:
         )
         # List top-level keys and their sub-keys
         for key, obj in sorted(f.items(), key=lambda x: len(x[0])):
-            sub_keys = [k for k in obj.keys() if k != "_index"]
-            if sub_keys and key != "X":
-                rich.print(
-                    f"\t[bold yellow]{key}:[/]\t"
-                    + ", ".join(f"[bright_white]{sub}[/]" for sub in sub_keys)
-                )
+            # Only process Groups, skip Datasets like X
+            if isinstance(obj, h5py.Group):
+                sub_keys = [k for k in obj.keys() if k != "_index"]
+                if sub_keys and key != "X":
+                    rich.print(
+                        f"\t[bold yellow]{key}:[/]\t"
+                        + ", ".join(f"[bright_white]{sub}[/]" for sub in sub_keys)
+                    )
