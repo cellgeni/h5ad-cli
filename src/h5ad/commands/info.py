@@ -1,32 +1,174 @@
 from pathlib import Path
+from typing import Optional, Union
 
 import h5py
 import rich
 from rich.console import Console
-from h5ad.info import axis_len
+from rich.tree import Tree
+from h5ad.info import axis_len, get_entry_type, format_type_info
+
+# Preferred display order for top-level keys
+KEY_ORDER = ["X", "obs", "var", "obsm", "varm", "layers", "obsp", "varp", "uns"]
 
 
-def show_info(file: Path, console: Console) -> None:
+def _sort_keys(keys: list) -> list:
+    """Sort keys according to KEY_ORDER, with unknown keys at the end."""
+    order_map = {k: i for i, k in enumerate(KEY_ORDER)}
+    return sorted(keys, key=lambda k: (order_map.get(k, len(KEY_ORDER)), k))
+
+
+def show_info(
+    file: Path,
+    console: Console,
+    show_types: bool = False,
+    obj_path: Optional[str] = None,
+) -> None:
     """
     Show high-level information about the .h5ad file.
     Args:
         file (Path): Path to the .h5ad file
         console (Console): Rich console for output
+        show_types (bool): Show detailed type information for each entry
+        obj_path (Optional[str]): Specific object path to inspect (e.g., 'obsm/X_pca')
     """
     with h5py.File(file, "r") as f:
+        # If a specific path is requested, show detailed info for that object
+        if obj_path:
+            _show_object_info(f, obj_path, console)
+            return
+
         # Get n_obs and n_var
         n_obs = axis_len(f, "obs")
         n_var = axis_len(f, "var")
         rich.print(
             f"[bold cyan]An object with n_obs × n_var: {n_obs if n_obs is not None else '?'} × {n_var if n_var is not None else '?'}[/]"
         )
-        # List top-level keys and their sub-keys
-        for key, obj in sorted(f.items(), key=lambda x: len(x[0])):
-            # Only process Groups, skip Datasets like X
-            if isinstance(obj, h5py.Group):
-                sub_keys = [k for k in obj.keys() if k != "_index"]
-                if sub_keys and key != "X":
-                    rich.print(
-                        f"\t[bold yellow]{key}:[/]\t"
-                        + ", ".join(f"[bright_white]{sub}[/]" for sub in sub_keys)
+
+        if show_types:
+            _show_types_tree(f, console)
+        else:
+            # List top-level keys and their sub-keys (original behavior)
+            for key in _sort_keys(list(f.keys())):
+                obj = f[key]
+                # Only process Groups, skip Datasets like X
+                if isinstance(obj, h5py.Group):
+                    sub_keys = [k for k in obj.keys() if k != "_index"]
+                    if sub_keys and key != "X":
+                        rich.print(
+                            f"\t[bold yellow]{key}:[/]\t"
+                            + ", ".join(f"[bright_white]{sub}[/]" for sub in sub_keys)
+                        )
+
+
+def _show_types_tree(f: h5py.File, console: Console) -> None:
+    """Show a tree view with type information for all entries.
+
+    Recursion depth by group:
+        - obs/var: top level only (no children)
+        - X: top level only
+        - obsm/obsp/varm/varp/layers: 1 level (show matrices)
+        - uns: 2 levels deep
+    """
+    tree = Tree(f"[bold]{f.filename}[/]")
+
+    # Define max depth for each top-level group
+    max_depth_map = {
+        "obs": 0,
+        "var": 0,
+        "X": 0,
+        "obsm": 1,
+        "obsp": 1,
+        "varm": 1,
+        "varp": 1,
+        "layers": 1,
+        "uns": 2,
+    }
+
+    def add_node(
+        parent_tree: Tree,
+        name: str,
+        obj: Union[h5py.Group, h5py.Dataset],
+        current_depth: int,
+        max_depth: int,
+    ) -> None:
+        info = get_entry_type(obj)
+        type_str = format_type_info(info)
+
+        if isinstance(obj, h5py.Dataset):
+            shape_str = f"[dim]{obj.shape}[/]" if obj.shape else ""
+            node_text = f"[bright_white]{name}[/] {shape_str} {type_str}"
+            parent_tree.add(node_text)
+        else:
+            # Group
+            node_text = f"[bold yellow]{name}/[/] {type_str}"
+            subtree = parent_tree.add(node_text)
+
+            # Recurse only if within allowed depth
+            if current_depth < max_depth:
+                for child_name in sorted(obj.keys()):
+                    if child_name == "_index":
+                        continue
+                    child_obj = obj[child_name]
+                    add_node(
+                        subtree, child_name, child_obj, current_depth + 1, max_depth
                     )
+
+    # Add top-level items in preferred order
+    for key in _sort_keys(list(f.keys())):
+        obj = f[key]
+        # Skip empty groups
+        if isinstance(obj, h5py.Group):
+            children = [k for k in obj.keys() if k != "_index"]
+            if not children:
+                continue
+        max_depth = max_depth_map.get(key, 1)  # default to 1 level for unknown groups
+        add_node(tree, key, obj, current_depth=0, max_depth=max_depth)
+
+    console.print(tree)
+
+
+def _show_object_info(f: h5py.File, obj_path: str, console: Console) -> None:
+    """Show detailed info for a specific object path."""
+    # Normalize path
+    obj_path = obj_path.strip().lstrip("/")
+
+    if obj_path not in f:
+        console.print(f"[bold red]Error:[/] '{obj_path}' not found in the file.")
+        return
+
+    obj = f[obj_path]
+    info = get_entry_type(obj)
+
+    console.print(f"\n[bold cyan]Path:[/] {obj_path}")
+    console.print(f"[bold cyan]Type:[/] {info['type']}")
+
+    if info["encoding"]:
+        console.print(f"[bold cyan]Encoding:[/] {info['encoding']}")
+
+    if info["shape"]:
+        console.print(f"[bold cyan]Shape:[/] {info['shape']}")
+
+    if info["dtype"]:
+        console.print(f"[bold cyan]Dtype:[/] {info['dtype']}")
+
+    console.print(f"[bold cyan]Details:[/] {info['details']}")
+
+    # Show attributes if any
+    if obj.attrs:
+        console.print(f"\n[bold cyan]Attributes:[/]")
+        for k, v in obj.attrs.items():
+            v_str = v.decode("utf-8") if isinstance(v, bytes) else str(v)
+            if len(v_str) > 80:
+                v_str = v_str[:77] + "..."
+            console.print(f"  [dim]{k}:[/] {v_str}")
+
+    # If it's a group, show children
+    if isinstance(obj, h5py.Group):
+        children = [k for k in obj.keys() if k != "_index"]
+        if children:
+            console.print(f"\n[bold cyan]Children:[/]")
+            for child_name in sorted(children):
+                child_obj = obj[child_name]
+                child_info = get_entry_type(child_obj)
+                type_str = format_type_info(child_info)
+                console.print(f"  [bright_white]{child_name}[/] {type_str}")

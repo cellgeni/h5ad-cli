@@ -9,12 +9,14 @@ import typer
 import h5py
 import numpy as np
 
-from h5ad.commands import show_info, export_table, subset_h5ad
 
 app = typer.Typer(
-    help="Streaming CLI for huge .h5ad files (info, table, subset)."
+    help="Streaming CLI for huge .h5ad files (info, table, subset, export)."
 )
 console = Console(stderr=True)
+
+export_app = typer.Typer(help="Export objects from an .h5ad file to common formats.")
+app.add_typer(export_app, name="export")
 
 
 @app.command()
@@ -24,14 +26,32 @@ def info(
         help="Path to the .h5ad file",
         exists=True,
         readable=True,
-    )
+    ),
+    obj: Optional[str] = typer.Option(
+        None,
+        "--object",
+        "-o",
+        help="Object path to inspect (e.g., 'obsm/X_pca', 'X', 'uns')",
+    ),
+    types: bool = typer.Option(
+        False,
+        "--types",
+        "-t",
+        help="Show detailed type information for all entries",
+    ),
 ) -> None:
     """
     Show high-level information about the .h5ad file.
-    Args:
-        file (Path): Path to the .h5ad file
+
+    Use --types to see type information for each entry.
+    Use --object to inspect a specific object in detail.
+
+    Examples:
+        h5ad info data.h5ad
+        h5ad info --types data.h5ad
+        h5ad info --object obsm/X_pca data.h5ad
     """
-    show_info(file, console)
+    show_info(file, console, show_types=types, obj_path=obj)
 
 
 @app.command()

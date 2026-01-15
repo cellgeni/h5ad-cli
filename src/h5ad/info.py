@@ -1,5 +1,142 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any, Union
 import h5py
+import numpy as np
+
+
+def get_entry_type(obj: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
+    """
+    Determine the type/format of an HDF5 object for export guidance.
+
+    Returns a dict with:
+        - type: str (e.g., 'dataframe', 'sparse-matrix', 'dense-matrix', 'dict', 'image', 'array', 'scalar')
+        - export_as: str (suggested export format: csv, mtx, npy, json, image)
+        - encoding: str (h5ad encoding-type if present)
+        - shape: tuple or None
+        - dtype: str or None
+        - details: str (human-readable description)
+    """
+    result: Dict[str, Any] = {
+        "type": "unknown",
+        "export_as": None,
+        "encoding": None,
+        "shape": None,
+        "dtype": None,
+        "details": "",
+    }
+
+    # Get encoding-type attribute if present
+    enc = obj.attrs.get("encoding-type", b"")
+    if isinstance(enc, bytes):
+        enc = enc.decode("utf-8")
+    result["encoding"] = enc if enc else None
+
+    if isinstance(obj, h5py.Dataset):
+        result["shape"] = obj.shape
+        result["dtype"] = str(obj.dtype)
+
+        # Scalar
+        if obj.shape == ():
+            result["type"] = "scalar"
+            result["export_as"] = "json"
+            result["details"] = f"Scalar value ({obj.dtype})"
+            return result
+
+        # Check if it looks like an image (2D or 3D with small last dim)
+        if obj.ndim in (2, 3):
+            if obj.ndim == 2 or (obj.ndim == 3 and obj.shape[2] in (1, 3, 4)):
+                # Could be an image if dtype is numeric and reasonable size
+                if np.issubdtype(obj.dtype, np.number) or obj.dtype == np.bool_:
+                    if obj.shape[0] <= 10000 and obj.shape[1] <= 10000:
+                        result["type"] = "image"
+                        result["export_as"] = "image"
+                        result["details"] = (
+                            f"Image-like array {obj.shape} ({obj.dtype})"
+                        )
+                        return result
+
+        # 1D or 2D numeric array -> dense matrix / array
+        if obj.ndim == 1:
+            result["type"] = "array"
+            result["export_as"] = "npy"
+            result["details"] = f"1D array [{obj.shape[0]}] ({obj.dtype})"
+        elif obj.ndim == 2:
+            result["type"] = "dense-matrix"
+            result["export_as"] = "npy"
+            result["details"] = (
+                f"Dense matrix {obj.shape[0]}×{obj.shape[1]} ({obj.dtype})"
+            )
+        else:
+            result["type"] = "array"
+            result["export_as"] = "npy"
+            result["details"] = f"ND array {obj.shape} ({obj.dtype})"
+
+        return result
+
+    # It's a Group
+    if isinstance(obj, h5py.Group):
+        # Check for sparse matrix (CSR/CSC)
+        if enc in ("csr_matrix", "csc_matrix"):
+            shape = obj.attrs.get("shape", None)
+            shape_str = f"{shape[0]}×{shape[1]}" if shape is not None else "?"
+            result["type"] = "sparse-matrix"
+            result["export_as"] = "mtx"
+            result["details"] = (
+                f"Sparse {enc.replace('_matrix', '').upper()} matrix {shape_str}"
+            )
+            return result
+
+        # Check for categorical
+        if enc == "categorical":
+            codes = obj.get("codes")
+            cats = obj.get("categories")
+            n_codes = codes.shape[0] if codes is not None else "?"
+            n_cats = cats.shape[0] if cats is not None else "?"
+            result["type"] = "categorical"
+            result["export_as"] = "csv"
+            result["details"] = f"Categorical [{n_codes} values, {n_cats} categories]"
+            return result
+
+        # Check for dataframe (obs/var style with _index)
+        if "_index" in obj.attrs or "obs_names" in obj or "var_names" in obj:
+            n_cols = len([k for k in obj.keys() if k != "_index"])
+            result["type"] = "dataframe"
+            result["export_as"] = "csv"
+            result["details"] = f"DataFrame with {n_cols} columns"
+            return result
+
+        # Check for array-like groups (nullable integer, string array, etc.)
+        if enc in ("nullable-integer", "string-array"):
+            result["type"] = "array"
+            result["export_as"] = "npy"
+            result["details"] = f"Encoded array ({enc})"
+            return result
+
+        # Generic dict/group
+        n_keys = len(list(obj.keys()))
+        result["type"] = "dict"
+        result["export_as"] = "json"
+        result["details"] = f"Group with {n_keys} keys"
+        return result
+
+    return result
+
+
+def format_type_info(info: Dict[str, Any]) -> str:
+    """Format type info as a colored string for display."""
+    type_colors = {
+        "dataframe": "green",
+        "sparse-matrix": "magenta",
+        "dense-matrix": "blue",
+        "array": "blue",
+        "dict": "yellow",
+        "image": "cyan",
+        "categorical": "green",
+        "scalar": "white",
+        "unknown": "red",
+    }
+
+    color = type_colors.get(info["type"], "white")
+    return f"[{color}]<{info['type']}>[/]"
 
 
 def axis_len(file: h5py.File, axis: str) -> Optional[int]:
