@@ -345,7 +345,10 @@ def subset_sparse_matrix_group(
     gdst = dst_parent.create_group(name)
     _copy_attrs(src.attrs, gdst.attrs)
     gdst.attrs["shape"] = (out_obs, out_var)
-    gdst.attrs["encoding-type"] = encoding
+    # Write encoding-type as bytes to match h5ad standard
+    gdst.attrs["encoding-type"] = (
+        encoding.encode("utf-8") if isinstance(encoding, str) else encoding
+    )
 
     # Write datasets (best-effort preserve compression/etc.)
     # Adjust chunks to not exceed output size
