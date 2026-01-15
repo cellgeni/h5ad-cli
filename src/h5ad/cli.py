@@ -9,7 +9,7 @@ import typer
 import h5py
 import numpy as np
 
-from h5ad.commands import show_info, export_table
+from h5ad.commands import show_info, export_table, subset_h5ad
 
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, ls, table, matrix, subset-obs-range)."
@@ -93,6 +93,49 @@ def table(
         head=head,
         console=console,
     )
+
+
+@app.command()
+def subset(
+    file: Path = typer.Argument(..., help="Input .h5ad", exists=True, readable=True),
+    output: Path = typer.Argument(..., help="Output .h5ad", writable=True),
+    obs: Optional[Path] = typer.Option(
+        None,
+        "--obs",
+        help="File with obs names (one per line)",
+        exists=True,
+        readable=True,
+    ),
+    var: Optional[Path] = typer.Option(
+        None,
+        "--var",
+        help="File with var names (one per line)",
+        exists=True,
+        readable=True,
+    ),
+    chunk_rows: int = typer.Option(
+        1024, "--chunk-rows", "-r", help="Row chunk size for dense matrices"
+    ),
+) -> None:
+    """Subset an h5ad by obs and/or var names."""
+    if obs is None and var is None:
+        console.print(
+            "[bold red]Error:[/] At least one of --obs or --var must be provided.",
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        subset_h5ad(
+            file=file,
+            output=output,
+            obs_file=obs,
+            var_file=var,
+            chunk_rows=chunk_rows,
+            console=console,
+        )
+    except Exception as e:
+        console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(code=1)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
