@@ -2,7 +2,8 @@ import numpy as np
 import h5py
 from typing import List, Dict
 
-def _decode_str_array(array: np.ndarray) -> np.ndarray:
+
+def decode_str_array(array: np.ndarray) -> np.ndarray:
     """
     Decode a numpy array of bytes or objects to strings.
     Args:
@@ -34,7 +35,7 @@ def read_categorical_column(
     key = id(col_group)
     if key not in cache:
         cats = col_group["categories"][...]
-        cats = _decode_str_array(cats)
+        cats = decode_str_array(cats)
         cache[key] = np.asarray(cats, dtype=str)
     cats = cache[key]
 
@@ -67,7 +68,7 @@ def col_chunk_as_strings(
         chunk = dataset[start:end]
         if chunk.ndim != 1:
             chunk = chunk.reshape(-1)
-        chunk = _decode_str_array(np.asarray(chunk))
+        chunk = decode_str_array(np.asarray(chunk))
         return chunk.tolist()
 
     if col_name in group and isinstance(group[col_name], h5py.Group):
