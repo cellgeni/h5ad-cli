@@ -3,8 +3,87 @@
 import pytest
 import h5py
 import numpy as np
-from h5ad.info import axis_len, get_axis_group
+from h5ad.info import axis_len, get_axis_group, get_entry_type, format_type_info
 from h5ad.read import decode_str_array, read_categorical_column, col_chunk_as_strings
+
+
+class TestGetEntryType:
+    """Tests for get_entry_type function."""
+
+    def test_get_entry_type_dataframe(self, sample_h5ad_file):
+        """Test type detection for dataframe (obs/var)."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["obs"])
+            assert info["type"] == "dataframe"
+            assert info["export_as"] == "csv"
+
+    def test_get_entry_type_dense_matrix(self, sample_h5ad_file):
+        """Test type detection for dense matrix."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["X"])
+            assert info["type"] == "dense-matrix"
+            assert info["export_as"] == "npy"
+            assert info["shape"] == (5, 4)
+
+    def test_get_entry_type_sparse_matrix(self, sample_sparse_csr_h5ad):
+        """Test type detection for sparse matrix."""
+        with h5py.File(sample_sparse_csr_h5ad, "r") as f:
+            info = get_entry_type(f["X"])
+            assert info["type"] == "sparse-matrix"
+            assert info["export_as"] == "mtx"
+            assert info["encoding"] == "csr_matrix"
+
+    def test_get_entry_type_dict(self, sample_h5ad_file):
+        """Test type detection for dict/group."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["uns"])
+            assert info["type"] == "dict"
+            assert info["export_as"] == "json"
+
+    def test_get_entry_type_1d_array(self, temp_dir):
+        """Test type detection for 1D array."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("arr", data=np.array([1, 2, 3, 4, 5]))
+        with h5py.File(file_path, "r") as f:
+            info = get_entry_type(f["arr"])
+            assert info["type"] == "array"
+            assert info["export_as"] == "npy"
+
+    def test_get_entry_type_scalar(self, temp_dir):
+        """Test type detection for scalar."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("scalar", data=42)
+        with h5py.File(file_path, "r") as f:
+            info = get_entry_type(f["scalar"])
+            assert info["type"] == "scalar"
+            assert info["export_as"] == "json"
+
+
+class TestFormatTypeInfo:
+    """Tests for format_type_info function."""
+
+    def test_format_type_info_dataframe(self):
+        """Test formatting dataframe type info."""
+        info = {"type": "dataframe", "export_as": "csv"}
+        result = format_type_info(info)
+        assert "<dataframe>" in result
+        assert "green" in result
+
+    def test_format_type_info_sparse(self):
+        """Test formatting sparse matrix type info."""
+        info = {"type": "sparse-matrix", "export_as": "mtx"}
+        result = format_type_info(info)
+        assert "<sparse-matrix>" in result
+        assert "magenta" in result
+
+    def test_format_type_info_unknown(self):
+        """Test formatting unknown type info."""
+        info = {"type": "unknown", "export_as": None}
+        result = format_type_info(info)
+        assert "<unknown>" in result
+        assert "red" in result
 
 
 class TestAxisLen:

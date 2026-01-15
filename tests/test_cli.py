@@ -33,6 +33,57 @@ class TestInfoCommand:
         # Should not raise exception
         show_info(sample_h5ad_file, console)
 
+    def test_info_types_flag(self, sample_h5ad_file):
+        """Test info command with --types flag."""
+        result = runner.invoke(app, ["info", "--types", str(sample_h5ad_file)])
+        assert result.exit_code == 0
+        # Should show type annotations in angle brackets
+        # Output may go to stdout or stderr depending on console config
+        output = result.stdout + (result.stderr or "")
+        assert "<" in output
+        assert ">" in output
+
+    def test_info_types_short_flag(self, sample_h5ad_file):
+        """Test info command with -t short flag."""
+        result = runner.invoke(app, ["info", "-t", str(sample_h5ad_file)])
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "<" in output
+
+    def test_info_object_flag(self, sample_h5ad_file):
+        """Test info command with --object flag."""
+        result = runner.invoke(app, ["info", "--object", "X", str(sample_h5ad_file)])
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "Path:" in output
+        assert "Type:" in output
+
+    def test_info_object_short_flag(self, sample_h5ad_file):
+        """Test info command with -o short flag."""
+        result = runner.invoke(app, ["info", "-o", "obs", str(sample_h5ad_file)])
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "Path:" in output
+        assert "dataframe" in output
+
+    def test_info_object_nested_path(self, sample_h5ad_file):
+        """Test info command with nested object path."""
+        result = runner.invoke(
+            app, ["info", "-o", "uns/description", str(sample_h5ad_file)]
+        )
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "Path:" in output
+
+    def test_info_object_not_found(self, sample_h5ad_file):
+        """Test info command with non-existent object path."""
+        result = runner.invoke(
+            app, ["info", "-o", "nonexistent", str(sample_h5ad_file)]
+        )
+        assert result.exit_code == 0  # Doesn't exit with error, just shows message
+        output = result.stdout + (result.stderr or "")
+        assert "not found" in output
+
 
 class TestTableCommand:
     """Tests for table command."""
