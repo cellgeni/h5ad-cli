@@ -160,10 +160,8 @@ def subset_axis_group(
                     ds = gdst.create_dataset("codes", data=codes_sub)
                     _copy_attrs(codes.attrs, ds.attrs)
             else:
-                if indices is None:
-                    src.copy(key, dst, name=key)
-                else:
-                    src.copy(key, dst, name=key)
+                # Unknown group type - copy as-is
+                src.copy(key, dst, name=key)
 
 
 def subset_dense_matrix(
