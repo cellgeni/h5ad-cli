@@ -1,6 +1,10 @@
 # Base image: Python 3.12 + uv preinstalled (Debian slim)
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
+# Environment variables
+ENV UV_NO_DEV=1
+ENV VENV=/env
+
 # Work directory inside the container
 WORKDIR /cli
 
@@ -9,8 +13,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-# Use only production deps (no dev extras if you add them later)
-ENV UV_NO_DEV=1
 
 # Clone the repo into /app
 RUN git clone --branch 0.1.0 https://github.com/cellgeni/h5ad-cli.git .
@@ -20,8 +22,12 @@ RUN git clone --branch 0.1.0 https://github.com/cellgeni/h5ad-cli.git .
 # --locked asserts that uv.lock is in sync with pyproject.toml
 RUN uv sync --locked
 
+# Create separate venv for csvkit to avoid dependency conflicts
+RUN uv venv $VENV --python 3.12 && \
+    uv pip install --python $VENV/bin/python csvkit
+
 # Put the project venv on PATH so `h5ad` is directly runnable
-ENV PATH="/cli/.venv/bin:${PATH}"
+ENV PATH="/cli/.venv/bin:${VENV}/bin:${PATH}"
 
 # Default entrypoint: run the CLI
 ENTRYPOINT ["h5ad"]
