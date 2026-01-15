@@ -14,6 +14,7 @@ from h5ad.commands import (
     export_table,
     subset_h5ad,
     export_object,
+    import_object,
 )
 
 app = typer.Typer(
@@ -226,6 +227,87 @@ def export_cmd(
             head=head,
             max_elements=max_elements,
             include_attrs=include_attrs,
+            console=console,
+        )
+    except Exception as e:
+        console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("import")
+def import_cmd(
+    file: Path = typer.Argument(
+        ..., help="Path to the source .h5ad file", exists=True, readable=True
+    ),
+    obj: str = typer.Argument(
+        ...,
+        help="Object path to create/replace (e.g., 'obs', 'X', 'obsm/X_pca', 'uns')",
+    ),
+    input_file: Path = typer.Argument(
+        ...,
+        help="Input data file. Extension determines format: .csv, .npy, .mtx, .json",
+        exists=True,
+        readable=True,
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output .h5ad file path. Required unless --inplace is specified.",
+        writable=True,
+    ),
+    inplace: bool = typer.Option(
+        False,
+        "--inplace",
+        help="Modify the source file directly instead of creating a new file.",
+    ),
+    index_column: Optional[str] = typer.Option(
+        None,
+        "--index-column",
+        "-i",
+        help="Column to use as index when importing CSV into obs/var. Defaults to first column.",
+    ),
+) -> None:
+    """
+    Import data from a file into the h5ad file.
+
+    Creates or replaces an object at the specified path. By default, creates
+    a new output file. Use --inplace to modify the source file directly.
+
+    The input format is auto-detected from the file extension:
+      - .csv  : DataFrames (obs, var)
+      - .npy  : Dense arrays/matrices (X, obsm/X_pca, varm/PCs, etc.)
+      - .mtx  : Sparse matrices (X, layers/*)
+      - .json : Dictionaries (uns, uns/metadata, etc.)
+
+    Dimensions are validated against existing obs/var:
+      - obs: row count must match n_obs
+      - var: row count must match n_var
+      - X, layers/*: must match (n_obs, n_var)
+      - obsm/*, obsp/*: first dimension must match n_obs
+      - varm/*, varp/*: first dimension must match n_var
+
+    Examples:
+        h5ad import data.h5ad obs cells.csv -o output.h5ad -i cell_id
+        h5ad import data.h5ad obsm/X_pca pca.npy -o output.h5ad
+        h5ad import data.h5ad X matrix.mtx --inplace
+        h5ad import data.h5ad uns/metadata config.json -o new.h5ad
+    """
+    if not inplace and output is None:
+        console.print(
+            "[bold red]Error:[/] Output file is required. "
+            "Use --output/-o to specify output file, or --inplace to modify source.",
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        import_object(
+            file=file,
+            obj=obj,
+            input_file=input_file,
+            output_file=output,
+            inplace=inplace,
+            index_column=index_column,
             console=console,
         )
     except Exception as e:
