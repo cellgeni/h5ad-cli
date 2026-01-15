@@ -10,7 +10,7 @@ def axis_len(file: h5py.File, axis: str) -> Optional[int]:
         file (h5py.File): Opened h5ad file object
         axis (str): Axis name ('obs' or 'var')
 
-    `Returns:
+    Returns:
         Optional[int]: Length of the axis, or None if not found
     """
     # Check if the specified axis exists in the file
