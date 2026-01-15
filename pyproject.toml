@@ -11,9 +11,27 @@ dependencies = [
     "typer>=0.20.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
+]
+
 [build-system]
 requires = ["uv_build>=0.8.0,<0.9.0"]
 build-backend = "uv_build"
 
 [project.scripts]
 h5ad = "h5ad.cli:main"
+
+[tool.coverage.run]
+source = ["src/h5ad"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
