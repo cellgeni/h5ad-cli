@@ -9,14 +9,17 @@ import typer
 import h5py
 import numpy as np
 
+from h5ad.commands import (
+    show_info,
+    export_table,
+    subset_h5ad,
+    export_object,
+)
 
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, table, subset, export)."
 )
 console = Console(stderr=True)
-
-export_app = typer.Typer(help="Export objects from an .h5ad file to common formats.")
-app.add_typer(export_app, name="export")
 
 
 @app.command()
@@ -151,6 +154,78 @@ def subset(
             obs_file=obs,
             var_file=var,
             chunk_rows=chunk_rows,
+            console=console,
+        )
+    except Exception as e:
+        console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command("export")
+def export_cmd(
+    file: Path = typer.Argument(
+        ..., help="Path to the .h5ad file", exists=True, readable=True
+    ),
+    obj: str = typer.Argument(
+        ..., help="Object path to export (e.g., 'obs', 'X', 'obsm/X_pca', 'uns')"
+    ),
+    out: Path = typer.Argument(
+        ...,
+        help="Output file path. Extension determines format: .csv, .npy, .mtx, .json, .png/.jpg/.tiff",
+    ),
+    columns: Optional[str] = typer.Option(
+        None,
+        "--columns",
+        "-c",
+        help="Comma separated column names (for dataframe/CSV export only)",
+    ),
+    chunk_rows: int = typer.Option(
+        10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
+    ),
+    head: Optional[int] = typer.Option(
+        None, "--head", "-n", help="Output only the first n rows (for CSV export)"
+    ),
+    max_elements: int = typer.Option(
+        1_000_000,
+        "--max-elements",
+        help="Maximum array elements for JSON export",
+    ),
+    include_attrs: bool = typer.Option(
+        False, "--include-attrs", help="Include HDF5 attributes in JSON export"
+    ),
+) -> None:
+    """
+    Export an object from the h5ad file to a common format.
+
+    The output format is auto-detected from the file extension:
+      - .csv  : DataFrames (obs, var)
+      - .npy  : Dense arrays/matrices (obsm/X_pca, varm/PCs, etc.)
+      - .mtx  : Sparse matrices (X if sparse)
+      - .json : Dictionaries/scalars (uns, uns/colors, etc.)
+      - .png/.jpg/.tiff : Image-like arrays
+
+    The object type is auto-detected and validated against the extension.
+
+    Examples:
+        h5ad export data.h5ad obs obs.csv
+        h5ad export data.h5ad obsm/X_pca pca.npy
+        h5ad export data.h5ad X matrix.mtx
+        h5ad export data.h5ad uns metadata.json
+    """
+    col_list: Optional[List[str]] = None
+    if columns:
+        col_list = [col.strip() for col in columns.split(",") if col.strip()]
+
+    try:
+        export_object(
+            file=file,
+            obj=obj,
+            out=out,
+            columns=col_list,
+            chunk_rows=chunk_rows,
+            head=head,
+            max_elements=max_elements,
+            include_attrs=include_attrs,
             console=console,
         )
     except Exception as e:

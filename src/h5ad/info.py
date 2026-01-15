@@ -41,30 +41,33 @@ def get_entry_type(obj: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
             result["details"] = f"Scalar value ({obj.dtype})"
             return result
 
-        # Check if it looks like an image (2D or 3D with small last dim)
-        if obj.ndim in (2, 3):
-            if obj.ndim == 2 or (obj.ndim == 3 and obj.shape[2] in (1, 3, 4)):
-                # Could be an image if dtype is numeric and reasonable size
-                if np.issubdtype(obj.dtype, np.number) or obj.dtype == np.bool_:
-                    if obj.shape[0] <= 10000 and obj.shape[1] <= 10000:
-                        result["type"] = "image"
-                        result["export_as"] = "image"
-                        result["details"] = (
-                            f"Image-like array {obj.shape} ({obj.dtype})"
-                        )
-                        return result
-
         # 1D or 2D numeric array -> dense matrix / array
         if obj.ndim == 1:
             result["type"] = "array"
             result["export_as"] = "npy"
             result["details"] = f"1D array [{obj.shape[0]}] ({obj.dtype})"
         elif obj.ndim == 2:
+            # Check if it looks like an image (2D with reasonable image dimensions)
+            # Minimum 16x16, maximum 10000x10000, numeric dtype
+            if (
+                obj.shape[0] >= 16
+                and obj.shape[1] >= 16
+                and obj.shape[0] <= 10000
+                and obj.shape[1] <= 10000
+                and (np.issubdtype(obj.dtype, np.number) or obj.dtype == np.bool_)
+            ):
+                # Could be an image, but default to dense-matrix
+                # Image export can still be used if user provides image extension
+                pass
             result["type"] = "dense-matrix"
             result["export_as"] = "npy"
             result["details"] = (
                 f"Dense matrix {obj.shape[0]}×{obj.shape[1]} ({obj.dtype})"
             )
+        elif obj.ndim == 3:
+            result["type"] = "array"
+            result["export_as"] = "npy"
+            result["details"] = f"3D array {obj.shape} ({obj.dtype})"
         else:
             result["type"] = "array"
             result["export_as"] = "npy"
@@ -129,7 +132,6 @@ def format_type_info(info: Dict[str, Any]) -> str:
         "dense-matrix": "blue",
         "array": "blue",
         "dict": "yellow",
-        "image": "cyan",
         "categorical": "green",
         "scalar": "white",
         "unknown": "red",
