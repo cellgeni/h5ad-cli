@@ -85,15 +85,21 @@ class TestInfoCommand:
         assert "not found" in output
 
 
-class TestTableCommand:
-    """Tests for table command."""
+class TestExportDataframeCommand:
+    """Tests for export dataframe command (replaces table command)."""
 
-    def test_table_command_obs(self, sample_h5ad_file, temp_dir):
-        """Test table command for obs axis."""
+    def test_export_dataframe_obs(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe for obs axis."""
         output = temp_dir / "obs_table.csv"
         result = runner.invoke(
             app,
-            ["table", str(sample_h5ad_file), "--axis", "obs", "--output", str(output)],
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                str(output),
+            ],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -105,12 +111,18 @@ class TestTableCommand:
             assert len(rows) == 6  # header + 5 rows
             assert "obs_names" in rows[0]
 
-    def test_table_command_var(self, sample_h5ad_file, temp_dir):
-        """Test table command for var axis."""
+    def test_export_dataframe_var(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe for var axis."""
         output = temp_dir / "var_table.csv"
         result = runner.invoke(
             app,
-            ["table", str(sample_h5ad_file), "--axis", "var", "--output", str(output)],
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "var",
+                str(output),
+            ],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -120,20 +132,19 @@ class TestTableCommand:
             rows = list(reader)
             assert len(rows) == 5  # header + 4 rows
 
-    def test_table_command_columns_filter(self, sample_h5ad_file, temp_dir):
-        """Test table command with column filter."""
+    def test_export_dataframe_columns_filter(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with column filter."""
         output = temp_dir / "table.csv"
         result = runner.invoke(
             app,
             [
-                "table",
+                "export",
+                "dataframe",
                 str(sample_h5ad_file),
-                "--axis",
                 "obs",
+                str(output),
                 "--columns",
                 "obs_names,cell_type",
-                "--output",
-                str(output),
             ],
         )
         assert result.exit_code == 0
@@ -146,20 +157,19 @@ class TestTableCommand:
             assert "cell_type" in header
             assert "n_counts" not in header
 
-    def test_table_command_head(self, sample_h5ad_file, temp_dir):
-        """Test table command with head limit."""
+    def test_export_dataframe_head(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with head limit."""
         output = temp_dir / "table.csv"
         result = runner.invoke(
             app,
             [
-                "table",
+                "export",
+                "dataframe",
                 str(sample_h5ad_file),
-                "--axis",
                 "obs",
+                str(output),
                 "--head",
                 "2",
-                "--output",
-                str(output),
             ],
         )
         assert result.exit_code == 0
@@ -169,15 +179,23 @@ class TestTableCommand:
             rows = list(reader)
             assert len(rows) == 3  # header + 2 rows
 
-    def test_table_command_invalid_axis(self, sample_h5ad_file):
-        """Test table command with invalid axis."""
+    def test_export_dataframe_invalid_axis(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with invalid axis."""
+        output = temp_dir / "table.csv"
         result = runner.invoke(
-            app, ["table", str(sample_h5ad_file), "--axis", "invalid"]
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "invalid",
+                str(output),
+            ],
         )
         assert result.exit_code == 1
         # Check both stdout and stderr since Console uses stderr=True
-        output = result.stdout + result.stderr
-        assert "Invalid axis" in output
+        output_text = result.stdout + result.stderr
+        assert "obs" in output_text or "var" in output_text
 
     def test_export_table_function(self, sample_h5ad_file, temp_dir):
         """Test export_table function directly."""
@@ -317,11 +335,25 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         assert "Show high-level information" in result.stdout
 
-    def test_table_help(self):
-        """Test table command help."""
-        result = runner.invoke(app, ["table", "--help"])
+    def test_export_help(self):
+        """Test export command help."""
+        result = runner.invoke(app, ["export", "--help"])
         assert result.exit_code == 0
-        assert "Export a table" in result.stdout
+        assert "dataframe" in result.stdout
+        assert "array" in result.stdout
+
+    def test_export_dataframe_help(self):
+        """Test export dataframe command help."""
+        result = runner.invoke(app, ["export", "dataframe", "--help"])
+        assert result.exit_code == 0
+        assert "Export a dataframe" in result.stdout
+
+    def test_import_help(self):
+        """Test import command help."""
+        result = runner.invoke(app, ["import", "--help"])
+        assert result.exit_code == 0
+        assert "dataframe" in result.stdout
+        assert "array" in result.stdout
 
     def test_subset_help(self):
         """Test subset command help."""

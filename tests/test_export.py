@@ -28,10 +28,12 @@ def _read_mtx(path: Path) -> np.ndarray:
         return mat
 
 
-class TestExportNpy:
-    def test_export_npy_dense_X(self, sample_h5ad_file, temp_dir):
+class TestExportArray:
+    def test_export_array_dense_X(self, sample_h5ad_file, temp_dir):
         out = temp_dir / "X.npy"
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "X", str(out)])
+        result = runner.invoke(
+            app, ["export", "array", str(sample_h5ad_file), "X", str(out)]
+        )
         assert result.exit_code == 0
         assert out.exists()
 
@@ -41,11 +43,11 @@ class TestExportNpy:
         np.testing.assert_allclose(got, expected)
 
 
-class TestExportMtx:
-    def test_export_mtx_csr(self, sample_sparse_csr_h5ad, temp_dir):
+class TestExportSparse:
+    def test_export_sparse_csr(self, sample_sparse_csr_h5ad, temp_dir):
         out = temp_dir / "X_csr.mtx"
         result = runner.invoke(
-            app, ["export", str(sample_sparse_csr_h5ad), "X", str(out)]
+            app, ["export", "sparse", str(sample_sparse_csr_h5ad), "X", str(out)]
         )
         assert result.exit_code == 0
         assert out.exists()
@@ -62,7 +64,7 @@ class TestExportMtx:
         )
         np.testing.assert_allclose(got, expected)
 
-    def test_export_mtx_csc(self, temp_dir):
+    def test_export_sparse_csc(self, temp_dir):
         # Build a small, consistent CSC matrix group
         file_path = temp_dir / "test_csc.h5ad"
         with h5py.File(file_path, "w") as f:
@@ -77,7 +79,7 @@ class TestExportMtx:
             X.create_dataset("indptr", data=indptr)
 
         out = temp_dir / "X_csc.mtx"
-        result = runner.invoke(app, ["export", str(file_path), "X", str(out)])
+        result = runner.invoke(app, ["export", "sparse", str(file_path), "X", str(out)])
         assert result.exit_code == 0
         assert out.exists()
 
@@ -93,10 +95,12 @@ class TestExportMtx:
         np.testing.assert_allclose(got, expected)
 
 
-class TestExportJson:
-    def test_export_json_uns(self, sample_h5ad_file, temp_dir):
+class TestExportDict:
+    def test_export_dict_uns(self, sample_h5ad_file, temp_dir):
         out = temp_dir / "uns.json"
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "uns", str(out)])
+        result = runner.invoke(
+            app, ["export", "dict", str(sample_h5ad_file), "uns", str(out)]
+        )
         assert result.exit_code == 0
         assert out.exists()
         payload = json.loads(out.read_text(encoding="utf-8"))
@@ -104,10 +108,12 @@ class TestExportJson:
         assert payload["description"] == ["Test dataset"]
 
 
-class TestExportCsv:
-    def test_export_csv_obs(self, sample_h5ad_file, temp_dir):
+class TestExportDataframe:
+    def test_export_dataframe_obs(self, sample_h5ad_file, temp_dir):
         out = temp_dir / "obs.csv"
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "obs", str(out)])
+        result = runner.invoke(
+            app, ["export", "dataframe", str(sample_h5ad_file), "obs", str(out)]
+        )
         assert result.exit_code == 0
         assert out.exists()
         text = out.read_text(encoding="utf-8")
@@ -115,47 +121,36 @@ class TestExportCsv:
 
 
 class TestExportValidation:
-    def test_wrong_extension_for_type(self, sample_h5ad_file, temp_dir):
-        """Test that wrong extension is rejected."""
-        out = temp_dir / "obs.npy"  # obs is a dataframe, should be .csv
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "obs", str(out)])
-        assert result.exit_code == 1
-        assert "does not match" in result.output or "Expected" in result.output
-
-    def test_sparse_matrix_wrong_extension(self, sample_sparse_csr_h5ad, temp_dir):
-        """Test that sparse matrix rejects .npy extension."""
-        out = temp_dir / "X.npy"  # sparse matrix should be .mtx
+    def test_wrong_type_for_dataframe(self, sample_h5ad_file, temp_dir):
+        """Test that wrong object type is rejected for dataframe export."""
+        out = temp_dir / "X.csv"
         result = runner.invoke(
-            app, ["export", str(sample_sparse_csr_h5ad), "X", str(out)]
+            app, ["export", "dataframe", str(sample_h5ad_file), "X", str(out)]
         )
         assert result.exit_code == 1
-        assert "does not match" in result.output or ".mtx" in result.output
+        assert "obs" in result.output or "var" in result.output
 
-    def test_dense_matrix_wrong_extension(self, sample_h5ad_file, temp_dir):
-        """Test that dense matrix rejects .csv extension."""
-        out = temp_dir / "X.csv"  # dense matrix should be .npy
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "X", str(out)])
+    def test_sparse_matrix_array_export(self, sample_sparse_csr_h5ad, temp_dir):
+        """Test that sparse matrix requires sparse export."""
+        out = temp_dir / "X.npy"
+        result = runner.invoke(
+            app, ["export", "array", str(sample_sparse_csr_h5ad), "X", str(out)]
+        )
+        # Should fail because X is sparse, not dense
         assert result.exit_code == 1
-        assert "does not match" in result.output or ".npy" in result.output
-
-    def test_json_wrong_extension(self, sample_h5ad_file, temp_dir):
-        """Test that dict rejects .npy extension."""
-        out = temp_dir / "uns.npy"  # uns is dict, should be .json
-        result = runner.invoke(app, ["export", str(sample_h5ad_file), "uns", str(out)])
-        assert result.exit_code == 1
-        assert "does not match" in result.output or ".json" in result.output
 
     def test_nonexistent_object(self, sample_h5ad_file, temp_dir):
         """Test that nonexistent object path is rejected."""
-        out = temp_dir / "output.csv"
+        out = temp_dir / "output.npy"
         result = runner.invoke(
-            app, ["export", str(sample_h5ad_file), "nonexistent/path", str(out)]
+            app,
+            ["export", "array", str(sample_h5ad_file), "nonexistent/path", str(out)],
         )
         assert result.exit_code == 1
-        assert "not found" in result.output
+        assert "not found" in result.output.lower() or "error" in result.output.lower()
 
-    def test_unknown_type_rejected(self, temp_dir):
-        """Test that unknown/complex types are rejected."""
+    def test_export_dict_unknown_type(self, temp_dir):
+        """Test that unknown/complex types can be exported as dict."""
         file_path = temp_dir / "test_unknown.h5ad"
         with h5py.File(file_path, "w") as f:
             g = f.create_group("obs")
@@ -166,7 +161,8 @@ class TestExportValidation:
             weird.attrs["encoding-type"] = "some_unknown_encoding"
 
         out = temp_dir / "weird.json"
-        result = runner.invoke(app, ["export", str(file_path), "weird_group", str(out)])
+        result = runner.invoke(
+            app, ["export", "dict", str(file_path), "weird_group", str(out)]
+        )
         # Should succeed as it's detected as dict
-        # but if it had sparse inside, it would fail
         assert result.exit_code == 0
