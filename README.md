@@ -21,7 +21,7 @@ For development and testing:
 uv sync --extra dev
 ```
 
-See [docs/TESTS.md](docs/TESTS.md) for testing documentation.
+See [docs/TESTING.md](docs/TESTING.md) for testing documentation.
 
 ## Usage
 Invoke any subcommand via `uv run h5ad ...`:
