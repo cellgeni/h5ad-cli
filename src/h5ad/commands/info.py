@@ -1,15 +1,17 @@
+from pathlib import Path
+
 import h5py
 import rich
 from rich.console import Console
-from pathlib import Path
-from h5ad.info import axis_len, get_axis_group
+from h5ad.info import axis_len
+
 
 def show_info(file: Path, console: Console) -> None:
     """
     Show high-level information about the .h5ad file.
     Args:
-        file (_type_): 
-        console (_type_): _description_
+        file (Path): Path to the .h5ad file
+        console (Console): Rich console for output
     """
     with h5py.File(file, "r") as f:
         # Get n_obs and n_var

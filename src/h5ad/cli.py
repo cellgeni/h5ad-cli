@@ -9,7 +9,7 @@ import typer
 import h5py
 import numpy as np
 
-from h5ad.commands import show_info
+from h5ad.commands import show_info, export_table
 
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, ls, table, matrix, subset-obs-range)."
@@ -45,12 +45,16 @@ def table(
     axis: str = typer.Option("obs", help="Axis to read from ('obs' or 'var')"),
     columns: Optional[str] = typer.Option(
         None,
-        "--cols",
+        "--columns",
         "-c",
         help="Comma separated column names to include in the output table",
     ),
     out: Optional[Path] = typer.Option(
-        None, "--out", "-o", help="Output file path (defaults to stdout)", writable=True
+        None,
+        "--output",
+        "-o",
+        help="Output file path (defaults to stdout)",
+        writable=True,
     ),
     chunk_rows: int = typer.Option(
         10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
@@ -69,79 +73,26 @@ def table(
         chunk_rows (int): Number of rows to read per chunk
         head (Optional[int]): Output only the first n rows
     """
+    # Validate axis parameter
     if axis not in ("obs", "var"):
-        raise typer.BadParameter("axis must be 'obs' or 'var'.")
+        console.print(
+            f"[bold red]Error:[/] Invalid axis '{axis}'. Must be either 'obs' or 'var'.",
+        )
+        raise typer.Exit(code=1)
 
-    col_list: List[str] = []
+    col_list: Optional[List[str]] = None
     if columns:
-        col_list = [c for c in columns.split(",") if c]
+        col_list = [col.strip() for col in columns.split(",") if col.strip()]
 
-    with h5py.File(file, "r") as f:
-        group, n_rows, index_name = _get_axis_group(f, axis)
-
-        # Determine columns to read
-        if col_list:
-            col_names = list(col_list)
-        else:
-            col_order = group.attrs.get("column-order", None)
-            if col_order is not None:
-                col_order = _decode_str_array(np.asarray(col_order))
-                col_names = list(col_order.tolist())
-            else:
-                col_names = sorted(
-                    name
-                    for name in group.keys()
-                    if isinstance(group[name], (h5py.Dataset, h5py.Group))
-                    and name != index_name
-                )
-
-        if isinstance(index_name, bytes):
-            index_name = index_name.decode("utf-8")
-
-        if index_name not in col_names:
-            col_names = [index_name] + col_names
-        else:
-            col_names = [index_name] + [c for c in col_names if c != index_name]
-
-        # Limit rows if head option is specified
-        if head is not None and head > 0:
-            n_rows = min(n_rows, head)
-
-        # Open writer
-        if out is None or str(out) == "-":
-            out_fh = sys.stdout
-        else:
-            out_fh = open(out, "w", newline="", encoding="utf8")
-        writer = csv.writer(out_fh)
-
-        # Write data in chunks
-        try:
-            writer.writerow(col_names)
-            cat_cache: Dict[int, np.ndarray] = {}
-            with console.status(
-                f"[magenta]Exporting {axis} table...[/] to {'stdout' if out_fh is sys.stdout else out}"
-            ) as status:
-                for start in range(0, n_rows, chunk_rows):
-                    end = min(start + chunk_rows, n_rows)
-                    status.update(
-                        f"[magenta]Exporting rows {start}-{end} of {n_rows}...[/]"
-                    )
-                    cols_data: List[List[str]] = []
-                    # Read each column for the current chunk
-                    for col in col_names:
-                        cols_data.append(
-                            _col_chunk_as_strings(group, col, start, end, cat_cache)
-                        )
-                    # Write rows
-                    for row_idx in range(end - start):
-                        row = [
-                            cols_data[col_idx][row_idx]
-                            for col_idx in range(len(col_names))
-                        ]
-                        writer.writerow(row)
-        finally:
-            if out_fh is not sys.stdout:
-                out_fh.close()
+    export_table(
+        file=file,
+        axis=axis,
+        columns=col_list,
+        out=out,
+        chunk_rows=chunk_rows,
+        head=head,
+        console=console,
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
