@@ -3,8 +3,7 @@ name: Build & Push Docker image (tag)
 on:
   push:
     tags:
-      - "v*"
-      # or "*" if you tag without a v-prefix
+      - "*"
 
 concurrency:
   group: docker-${{ github.ref }}
