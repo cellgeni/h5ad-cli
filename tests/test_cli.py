@@ -6,7 +6,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 from h5ad.cli import app
 from h5ad.commands.info import show_info
-from h5ad.commands.table import export_table
+from h5ad.commands.export import export_table
 from rich.console import Console
 
 
