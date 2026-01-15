@@ -15,8 +15,7 @@ RUN apt-get update \
 
 
 # Copy the project files (from GitHub Actions checkout context)
-COPY pyproject.toml uv.lock ./
-COPY src/ ./src/
+COPY . .
 
 
 # Install the project according to pyproject.toml + uv.lock
