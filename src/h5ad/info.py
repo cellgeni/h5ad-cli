@@ -1,6 +1,5 @@
 from typing import Optional, Tuple
 import h5py
-import numpy as np
 
 
 def axis_len(file: h5py.File, axis: str) -> Optional[int]:
