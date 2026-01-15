@@ -1,12 +1,20 @@
 [project]
 name = "h5ad"
-version = "0.1.0"
+version = "0.2.0"
 description = "Streaming CLI utilities for exploring large AnnData .h5ad files"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "h5py>=3.15.1",
+    "numpy>=2.3.5",
+    "rich>=14.2.0",
     "typer>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.4",
+    "pytest-cov>=6.0.0",
 ]
 
 [build-system]
@@ -15,3 +23,15 @@ build-backend = "uv_build"
 
 [project.scripts]
 h5ad = "h5ad.cli:main"
+
+[tool.coverage.run]
+source = ["src/h5ad"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
