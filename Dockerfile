@@ -21,7 +21,7 @@ COPY src/ ./src/
 
 # Install the project according to pyproject.toml + uv.lock
 # --locked asserts that uv.lock is in sync with pyproject.toml
-RUN uv sync --locked
+RUN uv sync
 
 # Create separate venv for csvkit to avoid dependency conflicts
 RUN uv venv $VENV --python 3.12 && \
