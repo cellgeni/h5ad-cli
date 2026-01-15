@@ -34,8 +34,8 @@ jobs:
           images: quay.io/cellgeni/h5ad-cli
           tags: |
             type=ref,event=tag
-            # optionally also push "latest" for v* tags:
-            type=raw,value=latest,enable=${{ startsWith(github.ref_name, 'v') }}
+            # push "latest" only for tags WITHOUT hyphens (excludes pre-releases like 1.0.0-beta):
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
