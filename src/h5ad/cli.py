@@ -12,7 +12,7 @@ import numpy as np
 from h5ad.commands import show_info, export_table, subset_h5ad
 
 app = typer.Typer(
-    help="Streaming CLI for huge .h5ad files (info, ls, table, matrix, subset-obs-range)."
+    help="Streaming CLI for huge .h5ad files (info, table, subset)."
 )
 console = Console(stderr=True)
 
