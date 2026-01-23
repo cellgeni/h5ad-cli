@@ -102,10 +102,28 @@ class TestAxisLen:
             assert length == 4
 
     def test_axis_len_nonexistent(self, sample_h5ad_file):
-        """Test getting length of non-existent axis."""
+        """Test getting length of non-existent axis raises KeyError."""
         with h5py.File(sample_h5ad_file, "r") as f:
-            length = axis_len(f, "nonexistent")
-            assert length is None
+            with pytest.raises(KeyError, match="'nonexistent' not found"):
+                axis_len(f, "nonexistent")
+
+    def test_axis_len_not_a_group(self, temp_dir):
+        """Test that axis_len raises TypeError when axis is not a group."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("obs", data=np.array([1, 2, 3]))
+        with h5py.File(file_path, "r") as f:
+            with pytest.raises(TypeError, match="'obs' is not a group"):
+                axis_len(f, "obs")
+
+    def test_axis_len_missing_index(self, temp_dir):
+        """Test that axis_len raises KeyError when index dataset is missing."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_group("obs")
+        with h5py.File(file_path, "r") as f:
+            with pytest.raises(KeyError, match="Index dataset 'obs_names' not found"):
+                axis_len(f, "obs")
 
 
 class TestGetAxisGroup:
