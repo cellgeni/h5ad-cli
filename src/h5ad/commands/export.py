@@ -131,6 +131,7 @@ TYPE_EXTENSIONS = {
     "dict": {".json"},
     "scalar": {".json"},
     "categorical": {".csv"},
+    "awkward-array": {".json"},
 }
 
 # Image extensions for validation
@@ -195,108 +196,44 @@ def _check_json_exportable(h5obj: H5Obj, max_elements: int, path: str = "") -> N
             )
 
 
-def export_object(
+def export_npy(
     file: Path,
     obj: str,
     out: Path,
-    columns: Optional[List[str]],
-    chunk_rows: int,
-    head: Optional[int],
-    max_elements: int,
-    include_attrs: bool,
+    chunk_elements: int,
     console: Console,
 ) -> None:
     """
-    Export an HDF5 object to an appropriate format based on its type.
+    Export a dense HDF5 dataset to NumPy .npy without loading it all at once.
 
-    Auto-detects the object type and validates the output file extension.
+    Supports both:
+    - v0.2.0 (modern): Datasets with encoding-type="array"
+    - v0.1.0 (legacy): Plain datasets without encoding attributes
+    - Encoded groups: nullable-integer, nullable-boolean, string-array (extracts values)
     """
-    obj = _norm_path(obj)
-    out_ext = out.suffix.lower()
-
     with h5py.File(file, "r") as f:
         h5obj = _resolve(f, obj)
-        info = get_entry_type(h5obj)
-        obj_type = info["type"]
 
-        # Check if type is exportable
-        if obj_type not in EXPORTABLE_TYPES:
-            raise ValueError(
-                f"Cannot export object of type '{obj_type}'. "
-                f"Exportable types: {', '.join(sorted(EXPORTABLE_TYPES))}."
-            )
-
-        # Check if extension matches the type
-        valid_exts = TYPE_EXTENSIONS.get(obj_type, set())
-        if out_ext not in valid_exts:
-            ext_list = ", ".join(sorted(valid_exts))
-            raise ValueError(
-                f"Output extension '{out_ext}' does not match object type '{obj_type}'. "
-                f"Expected: {ext_list}."
-            )
-
-    # Dispatch to appropriate export function
-    if obj_type == "dataframe":
-        # For dataframe, obj must be obs or var
-        if obj not in ("obs", "var"):
-            raise ValueError(
-                f"CSV export for dataframes currently supports only 'obs' or 'var', "
-                f"not '{obj}'."
-            )
-        export_table(
-            file=file,
-            axis=obj,
-            columns=columns,
-            out=out,
-            chunk_rows=chunk_rows,
-            head=head,
-            console=console,
-        )
-
-    elif obj_type == "categorical":
-        # Categorical is also exported via table if it's a column in obs/var
-        raise ValueError(
-            f"Categorical objects should be exported as part of 'obs' or 'var' table. "
-            f"Use: h5ad export <file> obs <output.csv>"
-        )
-
-    elif obj_type in ("dense-matrix", "array"):
-        if out_ext in IMAGE_EXTENSIONS:
-            # User wants image output - validate dimensions
-            _export_image(file=file, obj=obj, out=out, console=console)
-        else:
-            _export_npy(
-                file=file, obj=obj, out=out, chunk_rows=chunk_rows, console=console
-            )
-
-    elif obj_type == "sparse-matrix":
-        _export_mtx(file=file, obj=obj, out=out, console=console)
-
-    elif obj_type in ("dict", "scalar"):
-        _export_json(
-            file=file,
-            obj=obj,
-            out=out,
-            max_elements=max_elements,
-            include_attrs=include_attrs,
-            console=console,
-        )
-
-
-def _export_npy(
-    file: Path,
-    obj: str,
-    out: Path,
-    chunk_rows: int,
-    console: Console,
-) -> None:
-    """Export a dense HDF5 dataset to NumPy .npy without loading it all at once."""
-    with h5py.File(file, "r") as f:
-        h5obj = _resolve(f, obj)
+        # Handle encoded groups that contain array data
         if isinstance(h5obj, h5py.Group):
-            raise ValueError("Target is a group; cannot export as .npy.")
+            enc = _get_encoding_type(h5obj)
+            if enc in ("nullable-integer", "nullable-boolean", "nullable-string-array"):
+                # Extract values from nullable array group
+                if "values" not in h5obj:
+                    raise ValueError(
+                        f"Encoded group '{obj}' is missing 'values' dataset."
+                    )
+                ds = h5obj["values"]
+                has_mask = "mask" in h5obj
+                console.print(f"[dim]Exporting nullable array values from '{obj}'[/]")
+            else:
+                raise ValueError(
+                    f"Target '{obj}' is a group with encoding '{enc}'; cannot export as .npy directly."
+                )
+        else:
+            ds = h5obj
+            has_mask = False
 
-        ds = h5obj
         out.parent.mkdir(parents=True, exist_ok=True)
         mm = np.lib.format.open_memmap(out, mode="w+", dtype=ds.dtype, shape=ds.shape)
         try:
@@ -307,7 +244,7 @@ def _export_npy(
 
             if ds.ndim == 1:
                 n = int(ds.shape[0])
-                step = max(1, int(chunk_rows))
+                step = max(1, int(chunk_elements))
                 with console.status(
                     f"[magenta]Exporting {obj} to {out}...[/]"
                 ) as status:
@@ -321,7 +258,9 @@ def _export_npy(
                 return
 
             n0 = int(ds.shape[0])
-            step0 = max(1, int(chunk_rows))
+            row_elems = int(np.prod(ds.shape[1:])) if ds.ndim > 1 else 1
+            # Convert element budget into a row count; fallback to 1 row if rows are larger.
+            step0 = max(1, int(chunk_elements) // max(1, row_elems))
             with console.status(f"[magenta]Exporting {obj} to {out}...[/]") as status:
                 for start in range(0, n0, step0):
                     end = min(start + step0, n0)
@@ -334,8 +273,19 @@ def _export_npy(
             del mm
 
 
-def _export_mtx(file: Path, obj: str, out: Path, console: Console) -> None:
-    """Export a CSR/CSC matrix group (AnnData encoding) to Matrix Market (.mtx)."""
+def export_mtx(
+    file: Path,
+    obj: str,
+    out: Optional[Path],
+    head: Optional[int],
+    chunk_elements: int,
+    console: Console,
+) -> None:
+    """Export a CSR/CSC matrix group (AnnData encoding) to Matrix Market (.mtx).
+
+    If out is None or "-", writes to stdout. The head parameter limits output lines.
+    chunk_elements controls how many nonzero elements are processed per slice.
+    """
     with h5py.File(file, "r") as f:
         h5obj = _resolve(f, obj)
         if not isinstance(h5obj, h5py.Group):
@@ -370,51 +320,86 @@ def _export_mtx(file: Path, obj: str, out: Path, console: Console) -> None:
 
         field = "real" if np.issubdtype(data.dtype, np.floating) else "integer"
 
-        out.parent.mkdir(parents=True, exist_ok=True)
-
+        # Load sparse index pointers (1 per major axis row/col); used to slice data/indices.
         indptr_arr = np.asarray(indptr[...], dtype=np.int64)
         nnz_ptr = int(indptr_arr[-1]) if indptr_arr.size else 0
         nnz_data = int(data.shape[0])
         nnz_idx = int(indices.shape[0])
-        nnz = min(nnz_ptr, nnz_data, nnz_idx)
+        nnz_limit = min(nnz_ptr, nnz_data, nnz_idx)
+        nnz = nnz_limit
+        elem_step = max(1, int(chunk_elements))
+        if head is not None and head > 0:
+            nnz = min(nnz_limit, head)
 
-        with open(out, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(f"%%MatrixMarket matrix coordinate {field} general\n")
-            fh.write("% generated by h5ad-cli\n")
-            fh.write(f"{n_rows} {n_cols} {nnz}\n")
+        # Write to stdout when out is None or "-", otherwise open a file on disk.
+        if out is None or str(out) == "-":
+            out_fh = sys.stdout
+        else:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out_fh = open(out, "w", encoding="utf-8", newline="\n")
+
+        use_status = out_fh is not sys.stdout
+        status_ctx = (
+            console.status(f"[magenta]Exporting {obj} to {out}...[/]")
+            if use_status
+            else nullcontext()
+        )
+        try:
+            # Matrix Market header: type, generator line, then shape and nnz.
+            out_fh.write(f"%%MatrixMarket matrix coordinate {field} general\n")
+            out_fh.write("% generated by h5ad-cli\n")
+            out_fh.write(f"{n_rows} {n_cols} {nnz}\n")
 
             major = n_rows if enc == "csr_matrix" else n_cols
-            with console.status(f"[magenta]Exporting {obj} to {out}...[/]") as status:
+            max_lines = head if head is not None and head > 0 else None
+            written = 0
+            with status_ctx as status:
                 for major_i in range(major):
-                    start = min(int(indptr_arr[major_i]), nnz)
-                    end = min(int(indptr_arr[major_i + 1]), nnz)
+                    start = min(int(indptr_arr[major_i]), nnz_limit)
+                    end = min(int(indptr_arr[major_i + 1]), nnz_limit)
                     if end <= start:
                         continue
-                    status.update(
-                        f"[magenta]Exporting {obj}: block {major_i+1}/{major}...[/]"
-                    )
-                    idx = np.asarray(indices[start:end], dtype=np.int64)
-                    vals = np.asarray(data[start:end])
-                    m = min(len(idx), len(vals))
-                    if m == 0:
-                        continue
-                    idx = idx[:m]
-                    vals = vals[:m]
-                    for k in range(m):
-                        if enc == "csr_matrix":
-                            r = major_i + 1
-                            c = int(idx[k]) + 1
-                        else:
-                            r = int(idx[k]) + 1
-                            c = major_i + 1
-                        v = vals[k]
-                        if isinstance(v, np.generic):
-                            v = v.item()
-                        fh.write(f"{r} {c} {v}\n")
-        console.print(f"[green]Wrote[/] {out}")
+                    if use_status and status:
+                        status.update(
+                            f"[magenta]Exporting {obj}: block {major_i+1}/{major}...[/]"
+                        )
+                    # Slice the sparse column/row segment for this major index in element chunks.
+                    for chunk_start in range(start, end, elem_step):
+                        chunk_end = min(chunk_start + elem_step, end)
+                        idx = np.asarray(indices[chunk_start:chunk_end], dtype=np.int64)
+                        vals = np.asarray(data[chunk_start:chunk_end])
+                        m = min(len(idx), len(vals))
+                        if m == 0:
+                            continue
+                        idx = idx[:m]
+                        vals = vals[:m]
+                        for k in range(m):
+                            if max_lines is not None and written >= max_lines:
+                                break
+                            if enc == "csr_matrix":
+                                r = major_i + 1
+                                c = int(idx[k]) + 1
+                            else:
+                                r = int(idx[k]) + 1
+                                c = major_i + 1
+                            v = vals[k]
+                            if isinstance(v, np.generic):
+                                v = v.item()
+                            # Matrix Market uses 1-based indices.
+                            out_fh.write(f"{r} {c} {v}\n")
+                            written += 1
+                        if max_lines is not None and written >= max_lines:
+                            break
+                    if max_lines is not None and written >= max_lines:
+                        break
+        finally:
+            if out_fh is not sys.stdout:
+                out_fh.close()
+        if out_fh is not sys.stdout:
+            console.print(f"[green]Wrote[/] {out}")
 
 
-def _export_json(
+def export_json(
     file: Path,
     obj: str,
     out: Path,
@@ -500,7 +485,7 @@ def _to_jsonable(h5obj: H5Obj, max_elements: int, include_attrs: bool) -> Any:
     return d
 
 
-def _export_image(file: Path, obj: str, out: Path, console: Console) -> None:
+def export_image(file: Path, obj: str, out: Path, console: Console) -> None:
     """Export an image-like dataset (H,W) or (H,W,C) to PNG/JPG/TIFF."""
     try:
         from PIL import Image  # type: ignore
