@@ -6,7 +6,15 @@ from typing import Optional, Sequence, List
 from rich.console import Console
 import typer
 
-from h5ad.commands import show_info, subset_h5ad
+from h5ad.commands import (
+    show_info,
+    subset_h5ad,
+    export_mtx,
+    export_npy,
+    export_json,
+    export_image,
+    export_table,
+)
 
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, subset, export, import)."
@@ -136,7 +144,7 @@ def export_dataframe(
         10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
     ),
     head: Optional[int] = typer.Option(
-        None, "--head", "-n", help="Output only the first n rows"
+        None, "--head", "-n", help="Output only the first n entries"
     ),
 ) -> None:
     """
@@ -147,7 +155,6 @@ def export_dataframe(
         h5ad export dataframe data.h5ad var --output var.csv --columns gene_id,mean
         h5ad export dataframe data.h5ad obs --head 100
     """
-    from h5ad.commands import export_table
 
     if entry not in ("obs", "var"):
         console.print(
@@ -179,12 +186,17 @@ def export_array(
     file: Path = typer.Argument(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(
-        ..., help="Object path to export (e.g., 'obsm/X_pca', 'varm/PCs', 'X')"
+    entry: str = typer.Argument(
+        ..., help="Entry path to export (e.g., 'obsm/X_pca', 'varm/PCs', 'X')"
     ),
-    out: Path = typer.Argument(..., help="Output .npy file path"),
-    chunk_rows: int = typer.Option(
-        10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
+    output: Path = typer.Option(
+        ..., "--output", "-o", help="Output .npy file path", writable=True
+    ),
+    chunk_elements: int = typer.Option(
+        10_000,
+        "--chunk",
+        "-r",
+        help="Number of elements to read per chunk",
     ),
 ) -> None:
     """
@@ -195,14 +207,13 @@ def export_array(
         h5ad export array data.h5ad X matrix.npy
         h5ad export array data.h5ad varm/PCs loadings.npy
     """
-    from h5ad.commands.export import _export_npy
 
     try:
-        _export_npy(
+        export_npy(
             file=file,
-            obj=obj,
-            out=out,
-            chunk_rows=chunk_rows,
+            obj=entry,
+            out=output,
+            chunk_elements=chunk_elements,
             console=console,
         )
     except Exception as e:
@@ -215,10 +226,25 @@ def export_sparse(
     file: Path = typer.Argument(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(
-        ..., help="Object path to export (e.g., 'X', 'layers/counts')"
+    entry: str = typer.Argument(
+        ..., help="Entry path to export (e.g., 'X', 'layers/counts')"
     ),
-    out: Path = typer.Argument(..., help="Output .mtx file path"),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        writable=True,
+        help="Output .mtx file path (defaults to stdout)",
+    ),
+    head: Optional[int] = typer.Option(
+        None, "--head", "-n", help="Output only the first n rows"
+    ),
+    chunk_elements: int = typer.Option(
+        10_000,
+        "--chunk",
+        "-r",
+        help="Number of nonzero elements to process per chunk",
+    ),
 ) -> None:
     """
     Export a sparse matrix (CSR/CSC) to Matrix Market (.mtx) format.
@@ -226,11 +252,18 @@ def export_sparse(
     Examples:
         h5ad export sparse data.h5ad X matrix.mtx
         h5ad export sparse data.h5ad layers/counts counts.mtx
+        h5ad export sparse data.h5ad X --head 100
     """
-    from h5ad.commands.export import _export_mtx
 
     try:
-        _export_mtx(file=file, obj=obj, out=out, console=console)
+        export_mtx(
+            file=file,
+            obj=entry,
+            out=output,
+            head=head,
+            chunk_elements=chunk_elements,
+            console=console,
+        )
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -241,8 +274,8 @@ def export_dict(
     file: Path = typer.Argument(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(
-        ..., help="Object path to export (e.g., 'uns', 'uns/colors')"
+    entry: str = typer.Argument(
+        ..., help="Entry path to export (e.g., 'uns', 'uns/colors')"
     ),
     out: Path = typer.Argument(..., help="Output .json file path"),
     max_elements: int = typer.Option(
@@ -261,12 +294,11 @@ def export_dict(
         h5ad export dict data.h5ad uns metadata.json
         h5ad export dict data.h5ad uns/colors colors.json
     """
-    from h5ad.commands.export import _export_json
 
     try:
-        _export_json(
+        export_json(
             file=file,
-            obj=obj,
+            obj=entry,
             out=out,
             max_elements=max_elements,
             include_attrs=include_attrs,
@@ -282,7 +314,7 @@ def export_image(
     file: Path = typer.Argument(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(..., help="Object path to export (2D or 3D array)"),
+    entry: str = typer.Argument(..., help="Entry path to export (2D or 3D array)"),
     out: Path = typer.Argument(..., help="Output image file (.png, .jpg, .tiff)"),
 ) -> None:
     """
@@ -293,10 +325,9 @@ def export_image(
     Examples:
         h5ad export image data.h5ad uns/spatial/image tissue.png
     """
-    from h5ad.commands.export import _export_image
 
     try:
-        _export_image(file=file, obj=obj, out=out, console=console)
+        export_image(file=file, obj=entry, out=out, console=console)
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -323,8 +354,8 @@ def import_dataframe(
     file: Path = typer.Argument(
         ..., help="Path to the source .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(
-        ..., help="Object path to create/replace ('obs' or 'var')"
+    entry: str = typer.Argument(
+        ..., help="Entry path to create/replace ('obs' or 'var')"
     ),
     input_file: Path = typer.Argument(
         ..., help="Input CSV file", exists=True, readable=True
@@ -357,9 +388,9 @@ def import_dataframe(
     """
     from h5ad.commands.import_data import _import_csv
 
-    if obj not in ("obs", "var"):
+    if entry not in ("obs", "var"):
         console.print(
-            f"[bold red]Error:[/] Object must be 'obs' or 'var', not '{obj}'.",
+            f"[bold red]Error:[/] Entry must be 'obs' or 'var', not '{entry}'.",
         )
         raise typer.Exit(code=1)
 
@@ -372,7 +403,7 @@ def import_dataframe(
 
     try:
         target = _get_target_file(file, output, inplace)
-        _import_csv(target, obj, input_file, index_column, console)
+        _import_csv(target, entry, input_file, index_column, console)
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
@@ -383,8 +414,8 @@ def import_array(
     file: Path = typer.Argument(
         ..., help="Path to the source .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(
-        ..., help="Object path to create/replace (e.g., 'X', 'obsm/X_pca')"
+    entry: str = typer.Argument(
+        ..., help="Entry path to create/replace (e.g., 'X', 'obsm/X_pca')"
     ),
     input_file: Path = typer.Argument(
         ..., help="Input .npy file", exists=True, readable=True
@@ -422,7 +453,7 @@ def import_array(
 
     try:
         target = _get_target_file(file, output, inplace)
-        _import_npy(target, obj, input_file, console)
+        _import_npy(target, entry, input_file, console)
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
