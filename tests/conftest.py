@@ -172,3 +172,53 @@ def sample_categorical_h5ad(temp_dir):
         f.create_dataset("X", data=X)
 
     return file_path
+
+
+@pytest.fixture
+def sample_legacy_v010_h5ad(temp_dir):
+    """Create a sample h5ad file with legacy v0.1.0 categorical columns.
+
+    In v0.1.0, categorical columns are stored as:
+    - Integer code datasets with a 'categories' attribute (HDF5 object reference)
+    - Categories stored in __categories/<colname> subgroup
+    """
+    file_path = temp_dir / "test_legacy_v010.h5ad"
+
+    with h5py.File(file_path, "w") as f:
+        # Create obs with legacy categorical column
+        obs = f.create_group("obs")
+        obs.attrs["_index"] = "obs_names"
+        obs.attrs["encoding-type"] = "dataframe"
+        obs.attrs["encoding-version"] = "0.1.0"
+        obs_names = ["cell_1", "cell_2", "cell_3", "cell_4"]
+        obs.create_dataset("obs_names", data=np.array(obs_names, dtype="S"))
+
+        # Create __categories subgroup (v0.1.0 convention)
+        categories_group = obs.create_group("__categories")
+        cell_type_cats = np.array(["TypeA", "TypeB", "TypeC"], dtype="S")
+        cats_ds = categories_group.create_dataset("cell_type", data=cell_type_cats)
+
+        # Create categorical column as integer codes with reference to categories
+        codes = np.array([0, 1, 0, 2], dtype=np.int8)
+        cell_type_ds = obs.create_dataset("cell_type", data=codes)
+        # Store HDF5 object reference to categories
+        cell_type_ds.attrs["categories"] = cats_ds.ref
+
+        # Add a regular non-categorical column
+        obs.create_dataset(
+            "n_counts", data=np.array([100, 200, 150, 300], dtype=np.int32)
+        )
+
+        # Create var
+        var = f.create_group("var")
+        var.attrs["_index"] = "var_names"
+        var.attrs["encoding-type"] = "dataframe"
+        var.attrs["encoding-version"] = "0.1.0"
+        var_names = ["gene_1", "gene_2"]
+        var.create_dataset("var_names", data=np.array(var_names, dtype="S"))
+
+        # Create X matrix (no encoding-type for legacy)
+        X = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]], dtype=np.float32)
+        f.create_dataset("X", data=X)
+
+    return file_path

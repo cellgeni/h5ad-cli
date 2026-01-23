@@ -245,9 +245,59 @@ class TestColChunkAsStrings:
             result = col_chunk_as_strings(f["obs"], "cell_type", 0, 4, cache)
             assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
 
-    def test_col_chunk_unsupported(self, sample_h5ad_file):
-        """Test reading unsupported column."""
+    def test_col_chunk_not_found(self, sample_h5ad_file):
+        """Test reading non-existent column."""
         with h5py.File(sample_h5ad_file, "r") as f:
             cache = {}
-            with pytest.raises(RuntimeError, match="Unsupported column"):
+            with pytest.raises(RuntimeError, match="not found in group"):
                 col_chunk_as_strings(f["obs"], "nonexistent", 0, 5, cache)
+
+
+class TestLegacyV010Support:
+    """Tests for legacy v0.1.0 format support."""
+
+    def test_get_entry_type_legacy_categorical(self, sample_legacy_v010_h5ad):
+        """Test type detection for legacy categorical column (v0.1.0)."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            info = get_entry_type(f["obs"]["cell_type"])
+            assert info["type"] == "categorical"
+            assert info["version"] == "0.1.0"
+            assert "Legacy" in info["details"]
+
+    def test_get_entry_type_legacy_dataframe(self, sample_legacy_v010_h5ad):
+        """Test type detection for legacy dataframe (v0.1.0)."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            info = get_entry_type(f["obs"])
+            assert info["type"] == "dataframe"
+            assert info["version"] == "0.1.0"
+            assert "legacy" in info["details"].lower()
+
+    def test_read_legacy_categorical_column(self, sample_legacy_v010_h5ad):
+        """Test reading legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = read_categorical_column(
+                f["obs"]["cell_type"], 0, 4, cache, f["obs"]
+            )
+            assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
+
+    def test_col_chunk_legacy_categorical(self, sample_legacy_v010_h5ad):
+        """Test col_chunk_as_strings with legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "cell_type", 0, 4, cache)
+            assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
+
+    def test_col_chunk_legacy_numeric(self, sample_legacy_v010_h5ad):
+        """Test col_chunk_as_strings with legacy numeric column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "n_counts", 0, 4, cache)
+            assert result == ["100", "200", "150", "300"]
+
+    def test_legacy_categorical_slice(self, sample_legacy_v010_h5ad):
+        """Test reading slice of legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "cell_type", 1, 3, cache)
+            assert result == ["TypeB", "TypeA"]

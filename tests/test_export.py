@@ -112,7 +112,8 @@ class TestExportDataframe:
     def test_export_dataframe_obs(self, sample_h5ad_file, temp_dir):
         out = temp_dir / "obs.csv"
         result = runner.invoke(
-            app, ["export", "dataframe", str(sample_h5ad_file), "obs", str(out)]
+            app,
+            ["export", "dataframe", str(sample_h5ad_file), "obs", "--output", str(out)],
         )
         assert result.exit_code == 0
         assert out.exists()
@@ -125,7 +126,8 @@ class TestExportValidation:
         """Test that wrong object type is rejected for dataframe export."""
         out = temp_dir / "X.csv"
         result = runner.invoke(
-            app, ["export", "dataframe", str(sample_h5ad_file), "X", str(out)]
+            app,
+            ["export", "dataframe", str(sample_h5ad_file), "X", "--output", str(out)],
         )
         assert result.exit_code == 1
         assert "obs" in result.output or "var" in result.output

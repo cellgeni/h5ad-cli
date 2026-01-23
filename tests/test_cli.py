@@ -66,17 +66,17 @@ class TestInfoCommand:
         output = result.stdout + (result.stderr or "")
         assert "<" in output
 
-    def test_info_entry_flag(self, sample_h5ad_file):
-        """Test info command with --entry flag."""
-        result = runner.invoke(app, ["info", "--entry", "X", str(sample_h5ad_file)])
+    def test_info_entry_positional(self, sample_h5ad_file):
+        """Test info command with entry as positional argument."""
+        result = runner.invoke(app, ["info", str(sample_h5ad_file), "X"])
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
         assert "Type:" in output
 
-    def test_info_entry_short_flag(self, sample_h5ad_file):
-        """Test info command with -e short flag."""
-        result = runner.invoke(app, ["info", "-e", "obs", str(sample_h5ad_file)])
+    def test_info_entry_obs(self, sample_h5ad_file):
+        """Test info command with obs entry."""
+        result = runner.invoke(app, ["info", str(sample_h5ad_file), "obs"])
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
@@ -84,18 +84,14 @@ class TestInfoCommand:
 
     def test_info_entry_nested_path(self, sample_h5ad_file):
         """Test info command with nested object path."""
-        result = runner.invoke(
-            app, ["info", "-e", "uns/description", str(sample_h5ad_file)]
-        )
+        result = runner.invoke(app, ["info", str(sample_h5ad_file), "uns/description"])
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
 
     def test_info_entry_not_found(self, sample_h5ad_file):
         """Test info command with non-existent object path."""
-        result = runner.invoke(
-            app, ["info", "-e", "nonexistent", str(sample_h5ad_file)]
-        )
+        result = runner.invoke(app, ["info", str(sample_h5ad_file), "nonexistent"])
         assert result.exit_code == 0  # Doesn't exit with error, just shows message
         output = result.stdout + (result.stderr or "")
         assert "not found" in output
@@ -114,6 +110,7 @@ class TestExportDataframeCommand:
                 "dataframe",
                 str(sample_h5ad_file),
                 "obs",
+                "--output",
                 str(output),
             ],
         )
@@ -137,6 +134,7 @@ class TestExportDataframeCommand:
                 "dataframe",
                 str(sample_h5ad_file),
                 "var",
+                "--output",
                 str(output),
             ],
         )
@@ -158,6 +156,7 @@ class TestExportDataframeCommand:
                 "dataframe",
                 str(sample_h5ad_file),
                 "obs",
+                "--output",
                 str(output),
                 "--columns",
                 "obs_names,cell_type",
@@ -183,6 +182,7 @@ class TestExportDataframeCommand:
                 "dataframe",
                 str(sample_h5ad_file),
                 "obs",
+                "--output",
                 str(output),
                 "--head",
                 "2",
@@ -205,6 +205,7 @@ class TestExportDataframeCommand:
                 "dataframe",
                 str(sample_h5ad_file),
                 "invalid",
+                "--output",
                 str(output),
             ],
         )
