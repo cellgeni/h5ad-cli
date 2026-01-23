@@ -11,7 +11,9 @@ from h5ad.commands import show_info, subset_h5ad
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, subset, export, import)."
 )
-console = Console(stderr=True)
+# Use stderr for status/progress to keep stdout clean for data output
+# force_terminal=True ensures Rich output is visible even in non-TTY environments
+console = Console(stderr=True, force_terminal=True)
 
 # Create sub-apps for export and import
 export_app = typer.Typer(help="Export objects from h5ad files.")
