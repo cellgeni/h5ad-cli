@@ -195,6 +195,127 @@ class TestExportDataframeCommand:
             rows = list(reader)
             assert len(rows) == 3  # header + 2 rows
 
+    def test_export_dataframe_head_short_flag(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with -n short flag."""
+        output = temp_dir / "table.csv"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                "--output",
+                str(output),
+                "-n",
+                "3",
+            ],
+        )
+        assert result.exit_code == 0
+
+        with open(output, "r") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+            assert len(rows) == 4  # header + 3 rows
+
+    def test_export_dataframe_stdout(self, sample_h5ad_file):
+        """Test export dataframe to stdout (no --output)."""
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                "--head",
+                "2",
+            ],
+        )
+        assert result.exit_code == 0
+        # Output should go to stdout
+        assert "obs_names" in result.stdout
+        assert "cell_" in result.stdout
+
+    def test_export_dataframe_columns_short_flag(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with -c short flag for columns."""
+        output = temp_dir / "table.csv"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                "-o",
+                str(output),
+                "-c",
+                "obs_names",
+            ],
+        )
+        assert result.exit_code == 0
+
+        with open(output, "r") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+            header = rows[0]
+            assert len(header) == 1
+            assert "obs_names" in header
+
+    def test_export_dataframe_chunk_rows(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with custom chunk size."""
+        output = temp_dir / "table.csv"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                "--output",
+                str(output),
+                "--chunk-rows",
+                "2",
+            ],
+        )
+        assert result.exit_code == 0
+        assert output.exists()
+
+        with open(output, "r") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+            assert len(rows) == 6  # header + 5 rows
+
+    def test_export_dataframe_combined_options(self, sample_h5ad_file, temp_dir):
+        """Test export dataframe with multiple options combined."""
+        output = temp_dir / "table.csv"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_h5ad_file),
+                "obs",
+                "-o",
+                str(output),
+                "-c",
+                "obs_names,cell_type",
+                "-n",
+                "3",
+                "-r",
+                "1",
+            ],
+        )
+        assert result.exit_code == 0
+
+        with open(output, "r") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+            assert len(rows) == 4  # header + 3 rows
+            header = rows[0]
+            assert "obs_names" in header
+            assert "cell_type" in header
+            assert "n_counts" not in header
+
     def test_export_dataframe_invalid_axis(self, sample_h5ad_file, temp_dir):
         """Test export dataframe with invalid axis."""
         output = temp_dir / "table.csv"
