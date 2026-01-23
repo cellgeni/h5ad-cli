@@ -50,35 +50,51 @@ class TestInfoCommand:
         output = result.stdout + (result.stderr or "")
         assert "<" in output
 
-    def test_info_object_flag(self, sample_h5ad_file):
-        """Test info command with --object flag."""
-        result = runner.invoke(app, ["info", "--object", "X", str(sample_h5ad_file)])
+    def test_info_depth_flag(self, sample_h5ad_file):
+        """Test info command with --depth flag."""
+        result = runner.invoke(
+            app, ["info", "--types", "--depth", "1", str(sample_h5ad_file)]
+        )
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "<" in output
+
+    def test_info_depth_short_flag(self, sample_h5ad_file):
+        """Test info command with -d short flag."""
+        result = runner.invoke(app, ["info", "-t", "-d", "2", str(sample_h5ad_file)])
+        assert result.exit_code == 0
+        output = result.stdout + (result.stderr or "")
+        assert "<" in output
+
+    def test_info_entry_flag(self, sample_h5ad_file):
+        """Test info command with --entry flag."""
+        result = runner.invoke(app, ["info", "--entry", "X", str(sample_h5ad_file)])
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
         assert "Type:" in output
 
-    def test_info_object_short_flag(self, sample_h5ad_file):
-        """Test info command with -o short flag."""
-        result = runner.invoke(app, ["info", "-o", "obs", str(sample_h5ad_file)])
+    def test_info_entry_short_flag(self, sample_h5ad_file):
+        """Test info command with -e short flag."""
+        result = runner.invoke(app, ["info", "-e", "obs", str(sample_h5ad_file)])
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
         assert "dataframe" in output
 
-    def test_info_object_nested_path(self, sample_h5ad_file):
+    def test_info_entry_nested_path(self, sample_h5ad_file):
         """Test info command with nested object path."""
         result = runner.invoke(
-            app, ["info", "-o", "uns/description", str(sample_h5ad_file)]
+            app, ["info", "-e", "uns/description", str(sample_h5ad_file)]
         )
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
         assert "Path:" in output
 
-    def test_info_object_not_found(self, sample_h5ad_file):
+    def test_info_entry_not_found(self, sample_h5ad_file):
         """Test info command with non-existent object path."""
         result = runner.invoke(
-            app, ["info", "-o", "nonexistent", str(sample_h5ad_file)]
+            app, ["info", "-e", "nonexistent", str(sample_h5ad_file)]
         )
         assert result.exit_code == 0  # Doesn't exit with error, just shows message
         output = result.stdout + (result.stderr or "")
