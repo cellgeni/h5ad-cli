@@ -1,6 +1,7 @@
 """Tests for the import command."""
 
 import json
+import re
 from pathlib import Path
 
 import h5py
@@ -11,6 +12,11 @@ from h5ad.cli import app
 
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestImportDataframe:
@@ -40,8 +46,9 @@ class TestImportDataframe:
             ],
         )
         assert result.exit_code == 0
-        assert "5 rows" in result.output
-        assert "2 columns" in result.output
+        output = strip_ansi(result.output)
+        assert "5 rows" in output
+        assert "2 columns" in output
 
         with h5py.File(sample_h5ad_file, "r") as f:
             assert "obs" in f
@@ -115,7 +122,7 @@ class TestImportDataframe:
             ],
         )
         assert result.exit_code == 0
-        assert "4 rows" in result.output
+        assert "4 rows" in strip_ansi(result.output)
 
     def test_import_dataframe_dimension_mismatch(self, sample_h5ad_file, temp_dir):
         """Test that dimension mismatch is rejected."""
@@ -218,7 +225,7 @@ class TestImportArray:
             ],
         )
         assert result.exit_code == 0
-        assert "5×10" in result.output
+        assert "5×10" in strip_ansi(result.output)
 
         with h5py.File(sample_h5ad_file, "r") as f:
             assert "obsm/X_pca" in f
@@ -355,8 +362,9 @@ class TestImportSparse:
             ],
         )
         assert result.exit_code == 0
-        assert "5×4" in result.output
-        assert "5 non-zero" in result.output
+        output = strip_ansi(result.output)
+        assert "5×4" in output
+        assert "5 non-zero" in output
 
         with h5py.File(sample_h5ad_file, "r") as f:
             assert "X" in f

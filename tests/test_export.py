@@ -120,6 +120,32 @@ class TestExportDataframe:
         text = out.read_text(encoding="utf-8")
         assert "obs_names" in text
 
+    def test_export_legacy_v010_dataframe(self, sample_legacy_v010_h5ad, temp_dir):
+        """Test exporting a legacy v0.1.0 dataframe with categorical columns."""
+        out = temp_dir / "obs_legacy.csv"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(sample_legacy_v010_h5ad),
+                "obs",
+                "--output",
+                str(out),
+            ],
+        )
+        assert result.exit_code == 0
+        assert out.exists()
+        text = out.read_text(encoding="utf-8")
+        # Should contain index and columns
+        assert "obs_names" in text
+        assert "cell_type" in text
+        # Should NOT contain __categories (reserved subgroup)
+        assert "__categories" not in text
+        # Should contain decoded categorical values, not codes
+        assert "TypeA" in text
+        assert "TypeB" in text
+
 
 class TestExportValidation:
     def test_wrong_type_for_dataframe(self, sample_h5ad_file, temp_dir):
