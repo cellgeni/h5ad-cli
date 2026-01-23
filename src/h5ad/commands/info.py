@@ -21,7 +21,8 @@ def show_info(
     file: Path,
     console: Console,
     show_types: bool = False,
-    obj_path: Optional[str] = None,
+    depth: Optional[int] = None,
+    entry_path: Optional[str] = None,
 ) -> None:
     """
     Show high-level information about the .h5ad file.
@@ -29,12 +30,13 @@ def show_info(
         file (Path): Path to the .h5ad file
         console (Console): Rich console for output
         show_types (bool): Show detailed type information for each entry
-        obj_path (Optional[str]): Specific object path to inspect (e.g., 'obsm/X_pca')
+        depth (Optional[int]): Maximum recursion depth for type display (only with show_types=True)
+        entry_path (Optional[str]): Specific entry path to inspect (e.g., 'obsm/X_pca')
     """
     with h5py.File(file, "r") as f:
         # If a specific path is requested, show detailed info for that object
-        if obj_path:
-            _show_object_info(f, obj_path, console)
+        if entry_path:
+            _show_object_info(f, entry_path, console)
             return
 
         # Get n_obs and n_var
@@ -45,7 +47,7 @@ def show_info(
         )
 
         if show_types:
-            _show_types_tree(f, console)
+            _show_types_tree(f, console, depth=depth)
         else:
             # List top-level keys and their sub-keys (original behavior)
             for key in _sort_keys(list(f.keys())):
@@ -60,7 +62,9 @@ def show_info(
                         )
 
 
-def _show_types_tree(f: h5py.File, console: Console) -> None:
+def _show_types_tree(
+    f: h5py.File, console: Console, depth: Optional[int] = None
+) -> None:
     """Show a tree view with type information for all entries.
 
     Recursion depth by group:
@@ -121,25 +125,27 @@ def _show_types_tree(f: h5py.File, console: Console) -> None:
             children = [k for k in obj.keys() if k != "_index"]
             if not children:
                 continue
-        max_depth = max_depth_map.get(key, 1)  # default to 1 level for unknown groups
+        max_depth = (
+            depth if depth is not None else max_depth_map.get(key, 1)
+        )  # default to 1 level for unknown groups
         add_node(tree, key, obj, current_depth=0, max_depth=max_depth)
 
     console.print(tree)
 
 
-def _show_object_info(f: h5py.File, obj_path: str, console: Console) -> None:
+def _show_object_info(f: h5py.File, entry_path: str, console: Console) -> None:
     """Show detailed info for a specific object path."""
     # Normalize path
-    obj_path = obj_path.strip().lstrip("/")
+    entry_path = entry_path.strip().lstrip("/")
 
-    if obj_path not in f:
-        console.print(f"[bold red]Error:[/] '{obj_path}' not found in the file.")
+    if entry_path not in f:
+        console.print(f"[bold red]Error:[/] '{entry_path}' not found in the file.")
         return
 
-    obj = f[obj_path]
-    info = get_entry_type(obj)
+    entry = f[entry_path]
+    info = get_entry_type(entry)
 
-    console.print(f"\n[bold cyan]Path:[/] {obj_path}")
+    console.print(f"\n[bold cyan]Path:[/] {entry_path}")
     console.print(f"[bold cyan]Type:[/] {info['type']}")
 
     if info["encoding"]:
@@ -154,21 +160,21 @@ def _show_object_info(f: h5py.File, obj_path: str, console: Console) -> None:
     console.print(f"[bold cyan]Details:[/] {info['details']}")
 
     # Show attributes if any
-    if obj.attrs:
+    if entry.attrs:
         console.print(f"\n[bold cyan]Attributes:[/]")
-        for k, v in obj.attrs.items():
+        for k, v in entry.attrs.items():
             v_str = v.decode("utf-8") if isinstance(v, bytes) else str(v)
             if len(v_str) > 80:
                 v_str = v_str[:77] + "..."
             console.print(f"  [dim]{k}:[/] {v_str}")
 
     # If it's a group, show children
-    if isinstance(obj, h5py.Group):
-        children = [k for k in obj.keys() if k != "_index"]
+    if isinstance(entry, h5py.Group):
+        children = [k for k in entry.keys() if k != "_index"]
         if children:
             console.print(f"\n[bold cyan]Children:[/]")
             for child_name in sorted(children):
-                child_obj = obj[child_name]
-                child_info = get_entry_type(child_obj)
+                child_entry = entry[child_name]
+                child_info = get_entry_type(child_entry)
                 type_str = format_type_info(child_info)
                 console.print(f"  [bright_white]{child_name}[/] {type_str}")
