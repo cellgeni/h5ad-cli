@@ -7,6 +7,10 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
     """
     Determine the type/format of an HDF5 object for export guidance.
 
+    Supports both:
+    - v0.2.0 (modern): Objects with encoding-type/encoding-version attributes
+    - v0.1.0 (legacy): Objects without encoding attributes, inferred from structure
+
     Returns a dict with:
         - type: str (e.g., 'dataframe', 'sparse-matrix', 'dense-matrix', 'dict', 'image', 'array', 'scalar')
         - export_as: str (suggested export format: csv, mtx, npy, json, image)
@@ -14,6 +18,7 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
         - shape: tuple or None
         - dtype: str or None
         - details: str (human-readable description)
+        - version: str ('0.2.0', '0.1.0', or None for unknown)
     """
     result: Dict[str, Any] = {
         "type": "unknown",
@@ -22,6 +27,7 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
         "shape": None,
         "dtype": None,
         "details": "",
+        "version": None,
     }
 
     # Get encoding-type attribute if present
@@ -30,10 +36,33 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
         enc = enc.decode("utf-8")
     result["encoding"] = enc if enc else None
 
+    # Get encoding-version if present
+    enc_ver = entry.attrs.get("encoding-version", b"")
+    if isinstance(enc_ver, bytes):
+        enc_ver = enc_ver.decode("utf-8")
+    result["version"] = enc_ver if enc_ver else None
+
     # Infer the type for Dataset entry
     if isinstance(entry, h5py.Dataset):
         result["shape"] = entry.shape
         result["dtype"] = str(entry.dtype)
+
+        # Check for legacy categorical (v0.1.0): dataset with 'categories' attribute
+        if "categories" in entry.attrs:
+            result["type"] = "categorical"
+            result["export_as"] = "csv"
+            result["version"] = result["version"] or "0.1.0"
+            # Try to get category count from referenced dataset
+            try:
+                cats_ref = entry.attrs["categories"]
+                cats_ds = entry.file[cats_ref]
+                n_cats = cats_ds.shape[0]
+            except Exception:
+                n_cats = "?"
+            result["details"] = (
+                f"Legacy categorical [{entry.shape[0]} values, {n_cats} categories]"
+            )
+            return result
 
         # Scalar
         if entry.shape == ():
@@ -65,7 +94,7 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
 
     # It's a Group
     if isinstance(entry, h5py.Group):
-        # Check for sparse matrix (CSR/CSC)
+        # Check for sparse matrix (CSR/CSC) - same in both versions
         if enc in ("csr_matrix", "csc_matrix"):
             shape = entry.attrs.get("shape", None)
             shape_str = f"{shape[0]}×{shape[1]}" if shape is not None else "?"
@@ -76,7 +105,7 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
             )
             return result
 
-        # Check for categorical
+        # Check for v0.2.0 categorical (Group with codes/categories)
         if enc == "categorical":
             codes = entry.get("codes")
             cats = entry.get("categories")
@@ -87,22 +116,59 @@ def get_entry_type(entry: Union[h5py.Group, h5py.Dataset]) -> Dict[str, Any]:
             result["details"] = f"Categorical [{n_codes} values, {n_cats} categories]"
             return result
 
-        # Check for dataframe (obs/var style with _index)
-        if "_index" in entry.attrs or "obs_names" in entry or "var_names" in entry:
-            n_cols = len([k for k in entry.keys() if k != "_index"])
+        # Check for dataframe (obs/var style)
+        # v0.2.0: has encoding-type="dataframe"
+        # v0.1.0: has _index attribute or obs_names/var_names dataset
+        if (
+            enc == "dataframe"
+            or "_index" in entry.attrs
+            or "obs_names" in entry
+            or "var_names" in entry
+        ):
+            # Detect version
+            if enc == "dataframe":
+                df_version = result["version"] or "0.2.0"
+            else:
+                df_version = "0.1.0"  # No encoding-type, legacy format
+            result["version"] = df_version
+
+            # Check for __categories subgroup (v0.1.0 legacy)
+            has_legacy_cats = "__categories" in entry
+            n_cols = len(
+                [k for k in entry.keys() if k not in ("_index", "__categories")]
+            )
+
             result["type"] = "dataframe"
             result["export_as"] = "csv"
-            result["details"] = f"DataFrame with {n_cols} columns"
+            if has_legacy_cats:
+                result["details"] = f"DataFrame with {n_cols} columns (legacy v0.1.0)"
+            else:
+                result["details"] = f"DataFrame with {n_cols} columns"
             return result
 
-        # Check for array-like groups (nullable integer, string array, etc.)
-        if enc in ("nullable-integer", "string-array"):
+        # Check for nullable arrays (v0.2.0)
+        if enc in ("nullable-integer", "nullable-boolean", "nullable-string-array"):
             result["type"] = "array"
             result["export_as"] = "npy"
             result["details"] = f"Encoded array ({enc})"
             return result
 
-        # Generic dict/group
+        # Check for string-array encoding
+        if enc == "string-array":
+            result["type"] = "array"
+            result["export_as"] = "npy"
+            result["details"] = "Encoded string array"
+            return result
+
+        # Check for awkward-array (experimental)
+        if enc == "awkward-array":
+            length = entry.attrs.get("length", "?")
+            result["type"] = "awkward-array"
+            result["export_as"] = "json"
+            result["details"] = f"Awkward array (length={length})"
+            return result
+
+        # Generic dict/group (v0.2.0 has encoding-type="dict", v0.1.0 has no attributes)
         n_keys = len(list(entry.keys()))
         result["type"] = "dict"
         result["export_as"] = "json"
