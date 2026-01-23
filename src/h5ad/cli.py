@@ -31,10 +31,8 @@ def info(
         exists=True,
         readable=True,
     ),
-    entry: Optional[str] = typer.Option(
+    entry: Optional[str] = typer.Argument(
         None,
-        "--entry",
-        "-e",
         help="Entry path to inspect (e.g., 'obsm/X_pca', 'X', 'uns')",
     ),
     types: bool = typer.Option(
@@ -59,9 +57,13 @@ def info(
     Examples:
         h5ad info data.h5ad
         h5ad info --types data.h5ad
-        h5ad info --entry obsm/X_pca data.h5ad
+        h5ad info obsm/X_pca data.h5ad
     """
-    show_info(file, console, show_types=types, depth=depth, entry_path=entry)
+    try:
+        show_info(file, console, show_types=types, depth=depth, entry_path=entry)
+    except Exception as e:
+        console.print(f"[bold red]Error:[/] {e}")
+        raise typer.Exit(code=1)
 
 
 # ============================================================================
@@ -118,8 +120,10 @@ def export_dataframe(
     file: Path = typer.Argument(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
-    obj: str = typer.Argument(..., help="Object path to export ('obs' or 'var')"),
-    out: Path = typer.Argument(..., help="Output CSV file path"),
+    entry: str = typer.Argument(..., help="Entry path to export ('obs' or 'var')"),
+    output: Path = typer.Option(
+        None, "--output", "-o", writable=True, help="Output CSV file path"
+    ),
     columns: Optional[str] = typer.Option(
         None,
         "--columns",
@@ -137,15 +141,15 @@ def export_dataframe(
     Export a dataframe (obs or var) to CSV.
 
     Examples:
-        h5ad export dataframe data.h5ad obs obs.csv
-        h5ad export dataframe data.h5ad var var.csv --columns gene_id,mean
-        h5ad export dataframe data.h5ad obs - --head 100
+        h5ad export dataframe data.h5ad obs --output obs.csv
+        h5ad export dataframe data.h5ad var --output var.csv --columns gene_id,mean
+        h5ad export dataframe data.h5ad obs --head 100
     """
     from h5ad.commands import export_table
 
-    if obj not in ("obs", "var"):
+    if entry not in ("obs", "var"):
         console.print(
-            f"[bold red]Error:[/] Object must be 'obs' or 'var', not '{obj}'.",
+            f"[bold red]Error:[/] Dataframe export is only supported for 'obs' or 'var' at this point, not '{entry}'.",
         )
         raise typer.Exit(code=1)
 
@@ -156,9 +160,9 @@ def export_dataframe(
     try:
         export_table(
             file=file,
-            axis=obj,
+            axis=entry,
             columns=col_list,
-            out=out if str(out) != "-" else None,
+            out=output,
             chunk_rows=chunk_rows,
             head=head,
             console=console,
