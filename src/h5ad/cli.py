@@ -31,11 +31,11 @@ def info(
         exists=True,
         readable=True,
     ),
-    obj: Optional[str] = typer.Option(
+    entry: Optional[str] = typer.Option(
         None,
-        "--object",
-        "-o",
-        help="Object path to inspect (e.g., 'obsm/X_pca', 'X', 'uns')",
+        "--entry",
+        "-e",
+        help="Entry path to inspect (e.g., 'obsm/X_pca', 'X', 'uns')",
     ),
     types: bool = typer.Option(
         False,
@@ -43,19 +43,25 @@ def info(
         "-t",
         help="Show detailed type information for all entries",
     ),
+    depth: int = typer.Option(
+        None,
+        "--depth",
+        "-d",
+        help="Maximum recursion depth for type display (only with --types)",
+    ),
 ) -> None:
     """
     Show high-level information about the .h5ad file.
 
     Use --types to see type information for each entry.
-    Use --object to inspect a specific object in detail.
+    Use --entry to inspect a specific entry in detail.
 
     Examples:
         h5ad info data.h5ad
         h5ad info --types data.h5ad
-        h5ad info --object obsm/X_pca data.h5ad
+        h5ad info --entry obsm/X_pca data.h5ad
     """
-    show_info(file, console, show_types=types, obj_path=obj)
+    show_info(file, console, show_types=types, depth=depth, entry_path=entry)
 
 
 # ============================================================================
