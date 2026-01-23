@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union, cast
 
@@ -40,15 +41,23 @@ def export_table(
         chunk_rows: Number of rows to read per chunk
         head: Output only the first n rows
         console: Rich console for status output
+
+    Supports both v0.2.0 (modern) and v0.1.0 (legacy) dataframe formats.
     """
     with h5py.File(file, "r") as f:
         group, n_rows, index_name = get_axis_group(f, axis)
+
+        # Reserved keys to exclude from column list
+        # __categories is used in v0.1.0 for storing categorical labels
+        reserved_keys = {"_index", "__categories"}
 
         # Determine columns to read
         if columns:
             col_names = list(columns)
         else:
-            col_names = [k for k in group.keys() if k != "_index" and k != index_name]
+            col_names = [
+                k for k in group.keys() if k not in reserved_keys and k != index_name
+            ]
             # Add index name if not already present
             if index_name and index_name not in col_names:
                 col_names.insert(0, index_name)
@@ -76,14 +85,22 @@ def export_table(
         try:
             writer.writerow(col_names)
             cat_cache: Dict[int, np.ndarray] = {}
-            with console.status(
-                f"[magenta]Exporting {axis} table...[/] to {'stdout' if out_fh is sys.stdout else out}"
-            ) as status:
+
+            # Use status spinner only when writing to file (not stdout)
+            use_status = out_fh is not sys.stdout
+            status_ctx = (
+                console.status(f"[magenta]Exporting {axis} table to {out}...[/]")
+                if use_status
+                else nullcontext()
+            )
+
+            with status_ctx as status:
                 for start in range(0, n_rows, chunk_rows):
                     end = min(start + chunk_rows, n_rows)
-                    status.update(
-                        f"[magenta]Exporting rows {start}-{end} of {n_rows}...[/]"
-                    )
+                    if use_status and status:
+                        status.update(
+                            f"[magenta]Exporting rows {start}-{end} of {n_rows}...[/]"
+                        )
                     cols_data: List[List[str]] = []
                     # Read each column for the current chunk
                     for col in col_names:
