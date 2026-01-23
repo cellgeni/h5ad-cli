@@ -54,7 +54,9 @@ def show_info(
                 obj = f[key]
                 # Only process Groups, skip Datasets like X
                 if isinstance(obj, h5py.Group):
-                    sub_keys = [k for k in obj.keys() if k != "_index"]
+                    sub_keys = [
+                        k for k in obj.keys() if k not in ("_index", "__categories")
+                    ]
                     if sub_keys and key != "X":
                         rich.print(
                             f"\t[bold yellow]{key}:[/]\t"
@@ -110,7 +112,7 @@ def _show_types_tree(
             # Recurse only if within allowed depth
             if current_depth < max_depth:
                 for child_name in sorted(obj.keys()):
-                    if child_name == "_index":
+                    if child_name in ("_index", "__categories"):
                         continue
                     child_obj = obj[child_name]
                     add_node(
@@ -122,7 +124,7 @@ def _show_types_tree(
         obj = f[key]
         # Skip empty groups
         if isinstance(obj, h5py.Group):
-            children = [k for k in obj.keys() if k != "_index"]
+            children = [k for k in obj.keys() if k not in ("_index", "__categories")]
             if not children:
                 continue
         max_depth = (
@@ -170,7 +172,7 @@ def _show_object_info(f: h5py.File, entry_path: str, console: Console) -> None:
 
     # If it's a group, show children
     if isinstance(entry, h5py.Group):
-        children = [k for k in entry.keys() if k != "_index"]
+        children = [k for k in entry.keys() if k not in ("_index", "__categories")]
         if children:
             console.print(f"\n[bold cyan]Children:[/]")
             for child_name in sorted(children):
