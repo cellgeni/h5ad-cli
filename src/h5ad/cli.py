@@ -245,6 +245,12 @@ def export_sparse(
         "-C",
         help="Number of rows/columns (depends on compression format) to process per chunk",
     ),
+    in_memory: bool = typer.Option(
+        False,
+        "--in-memory",
+        "-m",
+        help="Load the entire sparse matrix into memory before exporting (may be faster for small matrices)",
+    ),
 ) -> None:
     """
     Export a sparse matrix (CSR/CSC) to Matrix Market (.mtx) format.
@@ -262,7 +268,7 @@ def export_sparse(
             out=output,
             head=head,
             chunk_elements=chunk_elements,
-            memory_mb=memory_mb,
+            in_memory=in_memory,
             console=console,
         )
     except Exception as e:
