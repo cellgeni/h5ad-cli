@@ -1,11 +1,12 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional
 
-import h5py
 import rich
 from rich.console import Console
 from rich.tree import Tree
-from h5ad.info import axis_len, get_entry_type, format_type_info
+
+from h5ad.core.info import axis_len, format_type_info, get_entry_type
+from h5ad.storage import is_dataset, is_group, open_store
 
 # Preferred display order for top-level keys
 KEY_ORDER = ["X", "obs", "var", "obsm", "varm", "layers", "obsp", "varp", "uns"]
@@ -33,7 +34,8 @@ def show_info(
         depth (Optional[int]): Maximum recursion depth for type display (only with show_types=True)
         entry_path (Optional[str]): Specific entry path to inspect (e.g., 'obsm/X_pca')
     """
-    with h5py.File(file, "r") as f:
+    with open_store(file, "r") as store:
+        f = store.root
         # If a specific path is requested, show detailed info for that object
         if entry_path:
             _show_object_info(f, entry_path, console)
@@ -47,13 +49,13 @@ def show_info(
         )
 
         if show_types:
-            _show_types_tree(f, console, depth=depth)
+            _show_types_tree(f, console, root_label=str(file), depth=depth)
         else:
             # List top-level keys and their sub-keys (original behavior)
             for key in _sort_keys(list(f.keys())):
                 obj = f[key]
                 # Only process Groups, skip Datasets like X
-                if isinstance(obj, h5py.Group):
+                if is_group(obj):
                     sub_keys = [
                         k for k in obj.keys() if k not in ("_index", "__categories")
                     ]
@@ -65,7 +67,7 @@ def show_info(
 
 
 def _show_types_tree(
-    f: h5py.File, console: Console, depth: Optional[int] = None
+    f: Any, console: Console, root_label: str, depth: Optional[int] = None
 ) -> None:
     """Show a tree view with type information for all entries.
 
@@ -75,7 +77,7 @@ def _show_types_tree(
         - obsm/obsp/varm/varp/layers: 1 level (show matrices)
         - uns: 2 levels deep
     """
-    tree = Tree(f"[bold]{f.filename}[/]")
+    tree = Tree(f"[bold]{root_label}[/]")
 
     # Define max depth for each top-level group
     max_depth_map = {
@@ -93,14 +95,14 @@ def _show_types_tree(
     def add_node(
         parent_tree: Tree,
         name: str,
-        obj: Union[h5py.Group, h5py.Dataset],
+        obj: Any,
         current_depth: int,
         max_depth: int,
     ) -> None:
         info = get_entry_type(obj)
         type_str = format_type_info(info)
 
-        if isinstance(obj, h5py.Dataset):
+        if is_dataset(obj):
             shape_str = f"[dim]{obj.shape}[/]" if obj.shape else ""
             node_text = f"[bright_white]{name}[/] {shape_str} {type_str}"
             parent_tree.add(node_text)
@@ -123,7 +125,7 @@ def _show_types_tree(
     for key in _sort_keys(list(f.keys())):
         obj = f[key]
         # Skip empty groups
-        if isinstance(obj, h5py.Group):
+        if is_group(obj):
             children = [k for k in obj.keys() if k not in ("_index", "__categories")]
             if not children:
                 continue
@@ -135,7 +137,7 @@ def _show_types_tree(
     console.print(tree)
 
 
-def _show_object_info(f: h5py.File, entry_path: str, console: Console) -> None:
+def _show_object_info(f: Any, entry_path: str, console: Console) -> None:
     """Show detailed info for a specific object path."""
     # Normalize path
     entry_path = entry_path.strip().lstrip("/")
@@ -171,7 +173,7 @@ def _show_object_info(f: h5py.File, entry_path: str, console: Console) -> None:
             console.print(f"  [dim]{k}:[/] {v_str}")
 
     # If it's a group, show children
-    if isinstance(entry, h5py.Group):
+    if is_group(entry):
         children = [k for k in entry.keys() if k not in ("_index", "__categories")]
         if children:
             console.print(f"\n[bold cyan]Children:[/]")
