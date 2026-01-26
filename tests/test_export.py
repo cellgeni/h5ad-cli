@@ -28,11 +28,46 @@ def _read_mtx(path: Path) -> np.ndarray:
         return mat
 
 
+def _read_mtx_header_and_data(path: Path) -> tuple[int, int, int, list[str]]:
+    with open(path, "r", encoding="utf-8") as fh:
+        header = fh.readline()
+        assert header.startswith("%%MatrixMarket")
+        line = fh.readline()
+        while line.startswith("%"):
+            line = fh.readline()
+        n_rows, n_cols, nnz = map(int, line.split())
+        data_lines = [line.strip() for line in fh if line.strip()]
+        return n_rows, n_cols, nnz, data_lines
+
+
 class TestExportArray:
     def test_export_array_dense_X(self, sample_h5ad_file, temp_dir):
         out = temp_dir / "X.npy"
         result = runner.invoke(
-            app, ["export", "array", str(sample_h5ad_file), "X", str(out)]
+            app, ["export", "array", str(sample_h5ad_file), "X", "--output", str(out)]
+        )
+        assert result.exit_code == 0
+        assert out.exists()
+
+        got = np.load(out)
+        with h5py.File(sample_h5ad_file, "r") as f:
+            expected = np.asarray(f["X"][...])
+        np.testing.assert_allclose(got, expected)
+
+    def test_export_array_chunk(self, sample_h5ad_file, temp_dir):
+        out = temp_dir / "X_chunk.npy"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "array",
+                str(sample_h5ad_file),
+                "X",
+                "--output",
+                str(out),
+                "--chunk",
+                "3",
+            ],
         )
         assert result.exit_code == 0
         assert out.exists()
@@ -47,7 +82,15 @@ class TestExportSparse:
     def test_export_sparse_csr(self, sample_sparse_csr_h5ad, temp_dir):
         out = temp_dir / "X_csr.mtx"
         result = runner.invoke(
-            app, ["export", "sparse", str(sample_sparse_csr_h5ad), "X", str(out)]
+            app,
+            [
+                "export",
+                "sparse",
+                str(sample_sparse_csr_h5ad),
+                "X",
+                "--output",
+                str(out),
+            ],
         )
         assert result.exit_code == 0
         assert out.exists()
@@ -64,6 +107,31 @@ class TestExportSparse:
         )
         np.testing.assert_allclose(got, expected)
 
+    def test_export_sparse_head_limits_entries(self, sample_sparse_csr_h5ad, temp_dir):
+        out = temp_dir / "X_csr_head.mtx"
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "sparse",
+                str(sample_sparse_csr_h5ad),
+                "X",
+                "--output",
+                str(out),
+                "--head",
+                "2",
+            ],
+        )
+        assert result.exit_code == 0
+        assert out.exists()
+
+        n_rows, n_cols, nnz, data_lines = _read_mtx_header_and_data(out)
+        assert (n_rows, n_cols) == (4, 3)
+        assert nnz == 2
+        assert len(data_lines) == 2
+        assert data_lines[0].startswith("1 1 ")
+        assert data_lines[1].startswith("1 3 ")
+
     def test_export_sparse_csc(self, temp_dir):
         # Build a small, consistent CSC matrix group
         file_path = temp_dir / "test_csc.h5ad"
@@ -79,7 +147,9 @@ class TestExportSparse:
             X.create_dataset("indptr", data=indptr)
 
         out = temp_dir / "X_csc.mtx"
-        result = runner.invoke(app, ["export", "sparse", str(file_path), "X", str(out)])
+        result = runner.invoke(
+            app, ["export", "sparse", str(file_path), "X", "--output", str(out)]
+        )
         assert result.exit_code == 0
         assert out.exists()
 
@@ -162,7 +232,8 @@ class TestExportValidation:
         """Test that sparse matrix requires sparse export."""
         out = temp_dir / "X.npy"
         result = runner.invoke(
-            app, ["export", "array", str(sample_sparse_csr_h5ad), "X", str(out)]
+            app,
+            ["export", "array", str(sample_sparse_csr_h5ad), "X", "--output", str(out)],
         )
         # Should fail because X is sparse, not dense
         assert result.exit_code == 1
@@ -172,7 +243,14 @@ class TestExportValidation:
         out = temp_dir / "output.npy"
         result = runner.invoke(
             app,
-            ["export", "array", str(sample_h5ad_file), "nonexistent/path", str(out)],
+            [
+                "export",
+                "array",
+                str(sample_h5ad_file),
+                "nonexistent/path",
+                "--output",
+                str(out),
+            ],
         )
         assert result.exit_code == 1
         assert "not found" in result.output.lower() or "error" in result.output.lower()
