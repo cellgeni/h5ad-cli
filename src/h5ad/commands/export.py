@@ -210,6 +210,16 @@ def export_npy(
     - v0.2.0 (modern): Datasets with encoding-type="array"
     - v0.1.0 (legacy): Plain datasets without encoding attributes
     - Encoded groups: nullable-integer, nullable-boolean, string-array (extracts values)
+
+    Args:
+        file: Path to the .h5ad file
+        obj: HDF5 path to the dataset or encoded group
+        out: Output .npy file path
+        chunk_elements: Number of elements to read per chunk
+        console: Rich console for status output
+
+    Raises:
+        ValueError: If the target object is not exportable as .npy
     """
     with h5py.File(file, "r") as f:
         h5obj = _resolve(f, obj)
@@ -279,12 +289,26 @@ def export_mtx(
     out: Optional[Path],
     head: Optional[int],
     chunk_elements: int,
+    in_memory: bool,
     console: Console,
 ) -> None:
     """Export a CSR/CSC matrix group (AnnData encoding) to Matrix Market (.mtx).
 
     If out is None or "-", writes to stdout. The head parameter limits output lines.
-    chunk_elements controls how many rows/columns are processed per slice.
+    chunk_elements controls how many rows/columns are processed per slice when
+    streaming. Use in_memory for small matrices to load everything at once.
+
+    Args:
+        file: Path to the .h5ad file
+        obj: HDF5 path to the matrix group
+        out: Output .mtx file path (or None for stdout)
+        head: Output only the first n nonzero entries
+        chunk_elements: Number of rows/columns to process per chunk
+        in_memory: Load the entire sparse matrix into memory before exporting
+        console: Rich console for status output
+
+    Raises:
+        ValueError: If the target object is not a valid CSR/CSC matrix group.
     """
     with h5py.File(file, "r") as f:
         h5obj = _resolve(f, obj)
@@ -362,55 +386,89 @@ def export_mtx(
                 )
             out_fh.write(f"{n_rows} {n_cols} {nnz}\n")
 
-            # Iterate over major axis (rows for CSR, cols for CSC)
-            major = n_rows if enc == "csr_matrix" else n_cols
-            max_lines = head if head is not None and head > 0 else None
-            written = 0
-            with status_ctx as status:
-                for major_start in range(0, major, major_step):
-                    major_end = min(major_start + major_step, major)
+            if in_memory:
+                with status_ctx as status:
                     if use_status and status:
                         status.update(
-                            f"[magenta]Exporting {obj}: {major_start+1}-{major_end} of {major}...[/]"
+                            f"[magenta]Loading entire matrix {obj} into memory...[/]"
                         )
-                    for major_i in range(major_start, major_end):
-                        start = min(int(indptr_arr[major_i]), nnz_data)
-                        end = min(int(indptr_arr[major_i + 1]), nnz_data)
-                        if end <= start:
-                            continue
-                        idx = np.asarray(indices[start:end], dtype=np.int64)
-                        vals = np.asarray(data[start:end])
-                        m = min(len(idx), len(vals))
-                        if m == 0:
-                            raise ValueError("Sparse matrix chunk has zero length.")
-                        if max_lines is not None:
-                            remaining = max_lines - written
-                            if remaining <= 0:
+                    data_arr = np.asarray(data[...])
+                    indices_arr = np.asarray(indices[...], dtype=np.int64)
+                    counts = np.diff(indptr_arr)
+                    if int(counts.sum()) != nnz_data:
+                        raise ValueError(
+                            "Sparse matrix indptr does not match data/indices length."
+                        )
+
+                    if enc == "csr_matrix":
+                        major_idx = np.repeat(np.arange(n_rows, dtype=np.int64), counts)
+                        row_idx = major_idx
+                        col_idx = indices_arr
+                    else:
+                        major_idx = np.repeat(np.arange(n_cols, dtype=np.int64), counts)
+                        row_idx = indices_arr
+                        col_idx = major_idx
+
+                    if head is not None and head > 0:
+                        row_idx = row_idx[:nnz]
+                        col_idx = col_idx[:nnz]
+                        data_arr = data_arr[:nnz]
+
+                    data_fmt = "%.18g" if field == "real" else "%d"
+                    coords = np.column_stack((row_idx + 1, col_idx + 1, data_arr))
+                    if use_status and status:
+                        status.update(f"[magenta]Saving {nnz} entries to {out}...[/]")
+                    np.savetxt(out_fh, coords, fmt=["%d", "%d", data_fmt], newline="\n")
+            else:
+                # Iterate over major axis (rows for CSR, cols for CSC)
+                major = n_rows if enc == "csr_matrix" else n_cols
+                max_lines = head if head is not None and head > 0 else None
+                written = 0
+                with status_ctx as status:
+                    for major_start in range(0, major, major_step):
+                        major_end = min(major_start + major_step, major)
+                        if use_status and status:
+                            status.update(
+                                f"[magenta]Exporting {obj}: {major_start+1}-{major_end} of {major}...[/]"
+                            )
+                        for major_i in range(major_start, major_end):
+                            start = min(int(indptr_arr[major_i]), nnz_data)
+                            end = min(int(indptr_arr[major_i + 1]), nnz_data)
+                            if end <= start:
+                                continue
+                            idx = np.asarray(indices[start:end], dtype=np.int64)
+                            vals = np.asarray(data[start:end])
+                            m = min(len(idx), len(vals))
+                            if m == 0:
+                                raise ValueError("Sparse matrix chunk has zero length.")
+                            if max_lines is not None:
+                                remaining = max_lines - written
+                                if remaining <= 0:
+                                    break
+                                if m > remaining:
+                                    m = remaining
+                            idx = idx[:m]
+                            vals = vals[:m]
+                            idx_list = idx.tolist()
+                            vals_list = vals.tolist()
+                            if enc == "csr_matrix":
+                                r = major_i + 1
+                                lines = [
+                                    f"{r} {c + 1} {v}\n"
+                                    for c, v in zip(idx_list, vals_list)
+                                ]
+                            else:
+                                c = major_i + 1
+                                lines = [
+                                    f"{r + 1} {c} {v}\n"
+                                    for r, v in zip(idx_list, vals_list)
+                                ]
+                            out_fh.write("".join(lines))
+                            written += m
+                            if max_lines is not None and written >= max_lines:
                                 break
-                            if m > remaining:
-                                m = remaining
-                        idx = idx[:m]
-                        vals = vals[:m]
-                        idx_list = idx.tolist()
-                        vals_list = vals.tolist()
-                        if enc == "csr_matrix":
-                            r = major_i + 1
-                            lines = [
-                                f"{r} {c + 1} {v}\n"
-                                for c, v in zip(idx_list, vals_list)
-                            ]
-                        else:
-                            c = major_i + 1
-                            lines = [
-                                f"{r + 1} {c} {v}\n"
-                                for r, v in zip(idx_list, vals_list)
-                            ]
-                        out_fh.write("".join(lines))
-                        written += m
                         if max_lines is not None and written >= max_lines:
                             break
-                    if max_lines is not None and written >= max_lines:
-                        break
         finally:
             if out_fh is not sys.stdout:
                 out_fh.close()
