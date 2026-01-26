@@ -457,7 +457,7 @@ def subset_h5ad(
             )
             if obs_names_ds is None:
                 console.print("[bold red]Error:[/] Could not find obs names")
-                raise RuntimeError("Could not find obs names")
+                raise KeyError("Could not find obs names")
 
             obs_idx, missing_obs = indices_from_name_set(obs_names_ds, obs_keep)
             if missing_obs:
@@ -476,7 +476,7 @@ def subset_h5ad(
             )
             if var_names_ds is None:
                 console.print("[bold red]Error:[/] Could not find var names")
-                raise RuntimeError("Could not find var names")
+                raise KeyError("Could not find var names")
 
             var_idx, missing_var = indices_from_name_set(var_names_ds, var_keep)
             if missing_var:

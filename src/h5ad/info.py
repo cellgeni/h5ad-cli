@@ -210,7 +210,7 @@ def axis_len(file: h5py.File, axis: str) -> int:
         ValueError: If axis is not 'obs' or 'var'
         KeyError: If axis or index dataset not found in file
         TypeError: If axis is not a group or index is not a dataset
-        RuntimeError: If axis length cannot be determined
+        ValueError: If axis length cannot be determined
     """
     # Check if the specified axis exists in the file
     if axis not in file:
@@ -245,7 +245,7 @@ def axis_len(file: h5py.File, axis: str) -> int:
         raise TypeError(f"Index '{index_name}' in '{axis}' is not a dataset.")
     if dataset.shape:
         return int(dataset.shape[0])
-    raise RuntimeError(
+    raise ValueError(
         f"Cannot determine length of '{axis}': index dataset has no shape."
     )
 
@@ -265,7 +265,7 @@ def get_axis_group(file: h5py.File, axis: str) -> Tuple[h5py.Group, int, str]:
         ValueError: If axis is not 'obs' or 'var'
         KeyError: If axis or index dataset not found in file
         TypeError: If axis is not a group or index is not a dataset
-        RuntimeError: If axis length cannot be determined
+        ValueError: If axis length cannot be determined
     """
     if axis not in ("obs", "var"):
         raise ValueError("axis must be 'obs' or 'var'.")

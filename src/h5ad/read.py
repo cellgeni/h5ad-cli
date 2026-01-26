@@ -73,11 +73,11 @@ def read_categorical_column(
                 if col_name in cats_grp:
                     cats = cats_grp[col_name][...]
                 else:
-                    raise RuntimeError(
+                    raise KeyError(
                         f"Cannot find categories for legacy column {col.name}"
                     )
             else:
-                raise RuntimeError(
+                raise KeyError(
                     f"Cannot find categories for legacy column {col.name}"
                 )
             cats = decode_str_array(cats)
@@ -88,7 +88,7 @@ def read_categorical_column(
         codes = np.asarray(codes, dtype=np.int64)
         return [cats[c] if 0 <= c < len(cats) else "" for c in codes]
 
-    raise RuntimeError(f"Unsupported categorical column type: {type(col)}")
+    raise TypeError(f"Unsupported categorical column type: {type(col)}")
 
 
 def col_chunk_as_strings(
@@ -116,7 +116,7 @@ def col_chunk_as_strings(
         List[str]: Column values as strings for the specified slice
     """
     if col_name not in group:
-        raise RuntimeError(f"Column {col_name!r} not found in group {group.name}")
+        raise KeyError(f"Column {col_name!r} not found in group {group.name}")
 
     col = group[col_name]
 
@@ -150,10 +150,10 @@ def col_chunk_as_strings(
             # Apply mask: masked values become empty string
             return ["" if m else str(v) for v, m in zip(values, mask)]
 
-        raise RuntimeError(
+        raise ValueError(
             f"Unsupported group encoding {enc!r} for column {col_name!r}"
         )
 
-    raise RuntimeError(
+    raise TypeError(
         f"Unsupported column type for {col_name!r} in group {group.name}"
     )
