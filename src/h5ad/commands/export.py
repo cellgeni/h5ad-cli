@@ -494,10 +494,20 @@ def export_json(
         payload = _to_jsonable(
             h5obj, max_elements=max_elements, include_attrs=include_attrs
         )
-        out.parent.mkdir(parents=True, exist_ok=True)
-        with open(out, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, indent=2, ensure_ascii=False, sort_keys=True)
-        console.print(f"[green]Wrote[/] {out}")
+        # Write to stdout when out is None or "-", otherwise open a file on disk.
+        if out is None or str(out) == "-":
+            out_fh = sys.stdout
+        else:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out_fh = open(out, "w", encoding="utf-8")
+        try:
+            json.dump(payload, out_fh, indent=2, ensure_ascii=False, sort_keys=True)
+            out_fh.write("\n")
+        finally:
+            if out_fh is not sys.stdout:
+                out_fh.close()
+        if out_fh is not sys.stdout:
+            console.print(f"[green]Wrote[/] {out}")
 
 
 def _attrs_to_jsonable(

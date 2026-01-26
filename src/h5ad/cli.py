@@ -284,9 +284,11 @@ def export_dict(
     entry: str = typer.Argument(
         ..., help="Entry path to export (e.g., 'uns', 'uns/colors')"
     ),
-    out: Path = typer.Argument(..., help="Output .json file path"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output .json file path"
+    ),
     max_elements: int = typer.Option(
-        1_000_000,
+        100_000,
         "--max-elements",
         help="Maximum array elements for JSON export",
     ),
@@ -306,7 +308,7 @@ def export_dict(
         export_json(
             file=file,
             obj=entry,
-            out=out,
+            out=output,
             max_elements=max_elements,
             include_attrs=include_attrs,
             console=console,
