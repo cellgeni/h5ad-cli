@@ -45,3 +45,5 @@ Run help at any level (e.g. `uv run h5ad --help`, `uv run h5ad export --help`).
 - `subset` – stream and write a filtered copy based on obs/var name lists, preserving dense and sparse matrix encodings.
 - `export` – extract data from a store; subcommands: `dataframe` (obs/var to CSV), `array` (dense to `.npy`), `sparse` (CSR/CSC to `.mtx`), `dict` (JSON), `image` (PNG).
 - `import` – write new data into a store; subcommands: `dataframe` (CSV → obs/var), `array` (`.npy`), `sparse` (`.mtx`), `dict` (JSON).
+
+See [docs/GET_STARTED.md](docs/GET_STARTED.md) for a short tutorial.
