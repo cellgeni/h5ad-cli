@@ -98,7 +98,7 @@ def subset(
         readable=True,
     ),
     chunk_rows: int = typer.Option(
-        1024, "--chunk-rows", "-r", help="Row chunk size for dense matrices"
+        1024, "--chunk", "-C", help="Row chunk size for dense matrices"
     ),
 ) -> None:
     """Subset an h5ad by obs and/or var names."""
@@ -141,7 +141,7 @@ def export_dataframe(
         help="Comma separated column names to include",
     ),
     chunk_rows: int = typer.Option(
-        10000, "--chunk-rows", "-r", help="Number of rows to read per chunk"
+        10_000, "--chunk", "-C", help="Number of rows to read per chunk"
     ),
     head: Optional[int] = typer.Option(
         None, "--head", "-n", help="Output only the first n entries"
@@ -193,9 +193,9 @@ def export_array(
         ..., "--output", "-o", help="Output .npy file path", writable=True
     ),
     chunk_elements: int = typer.Option(
-        10_000,
+        100_000,
         "--chunk",
-        "-r",
+        "-C",
         help="Number of elements to read per chunk",
     ),
 ) -> None:
@@ -237,13 +237,13 @@ def export_sparse(
         help="Output .mtx file path (defaults to stdout)",
     ),
     head: Optional[int] = typer.Option(
-        None, "--head", "-n", help="Output only the first n rows"
+        None, "--head", "-n", help="Output only the first n entries of mtx file"
     ),
     chunk_elements: int = typer.Option(
-        10_000,
+        1_000,
         "--chunk",
-        "-r",
-        help="Number of nonzero elements to process per chunk",
+        "-C",
+        help="Number of rows/columns (depends on compression format) to process per chunk",
     ),
 ) -> None:
     """
@@ -262,6 +262,7 @@ def export_sparse(
             out=output,
             head=head,
             chunk_elements=chunk_elements,
+            memory_mb=memory_mb,
             console=console,
         )
     except Exception as e:
