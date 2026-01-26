@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 import h5py
 import numpy as np
 from rich.console import Console
+from PIL import Image
 
 from h5ad.read import col_chunk_as_strings, decode_str_array
 from h5ad.info import get_axis_group, get_entry_type
@@ -573,20 +574,24 @@ def _to_jsonable(h5obj: H5Obj, max_elements: int, include_attrs: bool) -> Any:
 
 
 def export_image(file: Path, obj: str, out: Path, console: Console) -> None:
-    """Export an image-like dataset (H,W) or (H,W,C) to PNG/JPG/TIFF."""
-    try:
-        from PIL import Image  # type: ignore
-    except Exception as e:  # pragma: no cover
-        raise ImportError(
-            "Pillow is required for image export. Install with: pip install h5ad[images]"
-        ) from e
-
+    """
+    Export an image-like dataset (H,W) or (H,W,C) to PNG/JPG/TIFF.
+    Args:
+        file: Path to the .h5ad file
+        obj: HDF5 path to the dataset
+        out: Output image file path
+        console: Rich console for status output
+    Raises:
+        ValueError: If the target object is not a valid image array.
+    """
+    # Load dataset
     with h5py.File(file, "r") as f:
         h5obj = _resolve(f, obj)
         if not isinstance(h5obj, h5py.Dataset):
             raise ValueError("Image export requires a dataset.")
         arr = np.asarray(h5obj[...])
 
+    # Validate shape
     if arr.ndim not in (2, 3):
         raise ValueError(f"Expected 2D or 3D image array; got shape {arr.shape}.")
     if arr.ndim == 3 and arr.shape[2] not in (1, 3, 4):
@@ -609,9 +614,11 @@ def export_image(file: Path, obj: str, out: Path, console: Console) -> None:
     else:
         raise ValueError(f"Unsupported image dtype: {arr.dtype}")
 
+    # If single-channel 3D, convert to 2D
     if arr.ndim == 3 and arr.shape[2] == 1:
         arr = arr[:, :, 0]
 
+    # Save image
     img = Image.fromarray(arr)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out)

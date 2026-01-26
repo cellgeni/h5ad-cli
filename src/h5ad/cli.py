@@ -12,9 +12,10 @@ from h5ad.commands import (
     export_mtx,
     export_npy,
     export_json,
-    export_image,
     export_table,
 )
+
+from h5ad.commands import export_image as export_image_cmd
 
 app = typer.Typer(
     help="Streaming CLI for huge .h5ad files (info, subset, export, import)."
@@ -324,7 +325,9 @@ def export_image(
         ..., help="Path to the .h5ad file", exists=True, readable=True
     ),
     entry: str = typer.Argument(..., help="Entry path to export (2D or 3D array)"),
-    out: Path = typer.Argument(..., help="Output image file (.png, .jpg, .tiff)"),
+    output: Optional[Path] = typer.Option(
+        None, "--output", "-o", help="Output image file (.png, .jpg, .tiff)"
+    ),
 ) -> None:
     """
     Export an image-like array to PNG/JPG/TIFF format.
@@ -336,7 +339,7 @@ def export_image(
     """
 
     try:
-        export_image(file=file, obj=entry, out=out, console=console)
+        export_image_cmd(file=file, obj=entry, out=output, console=console)
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
