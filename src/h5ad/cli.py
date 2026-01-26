@@ -18,7 +18,7 @@ from h5ad.commands import (
 from h5ad.commands import export_image as export_image_cmd
 
 app = typer.Typer(
-    help="Streaming CLI for huge .h5ad files (info, subset, export, import)."
+    help="Streaming CLI for huge .h5ad and .zarr files (info, subset, export, import)."
 )
 # Use stderr for status/progress to keep stdout clean for data output
 # force_terminal=True ensures Rich output is visible even in non-TTY environments
@@ -38,9 +38,11 @@ app.add_typer(import_app, name="import")
 def info(
     file: Path = typer.Argument(
         ...,
-        help="Path to the .h5ad file",
+        help="Path to the .h5ad/.zarr store",
         exists=True,
         readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: Optional[str] = typer.Argument(
         None,
@@ -82,8 +84,17 @@ def info(
 # ============================================================================
 @app.command()
 def subset(
-    file: Path = typer.Argument(..., help="Input .h5ad", exists=True, readable=True),
-    output: Path = typer.Argument(..., help="Output .h5ad", writable=True),
+    file: Path = typer.Argument(
+        ...,
+        help="Input .h5ad/.zarr",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
+    ),
+    output: Path = typer.Argument(
+        ..., help="Output .h5ad/.zarr", dir_okay=True, file_okay=True
+    ),
     obs: Optional[Path] = typer.Option(
         None,
         "--obs",
@@ -99,7 +110,12 @@ def subset(
         readable=True,
     ),
     chunk_rows: int = typer.Option(
-        1024, "--chunk", "-C", help="Row chunk size for dense matrices"
+        1024,
+        "--chunk",
+        "-C",
+        "--chunk-rows",
+        "-r",
+        help="Row chunk size for dense matrices",
     ),
 ) -> None:
     """Subset an h5ad by obs and/or var names."""
@@ -129,7 +145,12 @@ def subset(
 @export_app.command("dataframe")
 def export_dataframe(
     file: Path = typer.Argument(
-        ..., help="Path to the .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(..., help="Entry path to export ('obs' or 'var')"),
     output: Path = typer.Option(
@@ -142,7 +163,12 @@ def export_dataframe(
         help="Comma separated column names to include",
     ),
     chunk_rows: int = typer.Option(
-        10_000, "--chunk", "-C", help="Number of rows to read per chunk"
+        10_000,
+        "--chunk",
+        "-C",
+        "--chunk-rows",
+        "-r",
+        help="Number of rows to read per chunk",
     ),
     head: Optional[int] = typer.Option(
         None, "--head", "-n", help="Output only the first n entries"
@@ -185,7 +211,12 @@ def export_dataframe(
 @export_app.command("array")
 def export_array(
     file: Path = typer.Argument(
-        ..., help="Path to the .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(
         ..., help="Entry path to export (e.g., 'obsm/X_pca', 'varm/PCs', 'X')"
@@ -225,7 +256,12 @@ def export_array(
 @export_app.command("sparse")
 def export_sparse(
     file: Path = typer.Argument(
-        ..., help="Path to the .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(
         ..., help="Entry path to export (e.g., 'X', 'layers/counts')"
@@ -280,11 +316,17 @@ def export_sparse(
 @export_app.command("dict")
 def export_dict(
     file: Path = typer.Argument(
-        ..., help="Path to the .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(
         ..., help="Entry path to export (e.g., 'uns', 'uns/colors')"
     ),
+    output_arg: Optional[Path] = typer.Argument(None, help="Output .json file path"),
     output: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output .json file path"
     ),
@@ -306,10 +348,11 @@ def export_dict(
     """
 
     try:
+        out_path = output if output is not None else output_arg
         export_json(
             file=file,
             obj=entry,
-            out=output,
+            out=out_path,
             max_elements=max_elements,
             include_attrs=include_attrs,
             console=console,
@@ -322,7 +365,12 @@ def export_dict(
 @export_app.command("image")
 def export_image(
     file: Path = typer.Argument(
-        ..., help="Path to the .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(..., help="Entry path to export (2D or 3D array)"),
     output: Optional[Path] = typer.Option(
@@ -349,22 +397,21 @@ def export_image(
 # IMPORT subcommands
 # ============================================================================
 def _get_target_file(file: Path, output: Optional[Path], inplace: bool) -> Path:
-    """Determine target file and copy if needed."""
-    import shutil
+    """Determine target path and copy/convert if needed."""
+    from h5ad.commands.import_data import _prepare_target_path
 
-    if inplace:
-        return file
-    if output is None:
-        raise ValueError("Output file is required unless --inplace is specified.")
-    shutil.copy2(file, output)
-    console.print(f"[dim]Copied {file} → {output}[/]")
-    return output
+    return _prepare_target_path(file, output, inplace, console)
 
 
 @import_app.command("dataframe")
 def import_dataframe(
     file: Path = typer.Argument(
-        ..., help="Path to the source .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the source .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(
         ..., help="Entry path to create/replace ('obs' or 'var')"
@@ -376,8 +423,9 @@ def import_dataframe(
         None,
         "--output",
         "-o",
-        help="Output .h5ad file path. Required unless --inplace.",
-        writable=True,
+        help="Output .h5ad/.zarr path. Required unless --inplace.",
+        dir_okay=True,
+        file_okay=True,
     ),
     inplace: bool = typer.Option(
         False,
@@ -424,7 +472,12 @@ def import_dataframe(
 @import_app.command("array")
 def import_array(
     file: Path = typer.Argument(
-        ..., help="Path to the source .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the source .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     entry: str = typer.Argument(
         ..., help="Entry path to create/replace (e.g., 'X', 'obsm/X_pca')"
@@ -436,8 +489,9 @@ def import_array(
         None,
         "--output",
         "-o",
-        help="Output .h5ad file path. Required unless --inplace.",
-        writable=True,
+        help="Output .h5ad/.zarr path. Required unless --inplace.",
+        dir_okay=True,
+        file_okay=True,
     ),
     inplace: bool = typer.Option(
         False,
@@ -474,7 +528,12 @@ def import_array(
 @import_app.command("sparse")
 def import_sparse(
     file: Path = typer.Argument(
-        ..., help="Path to the source .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the source .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     obj: str = typer.Argument(
         ..., help="Object path to create/replace (e.g., 'X', 'layers/counts')"
@@ -486,8 +545,9 @@ def import_sparse(
         None,
         "--output",
         "-o",
-        help="Output .h5ad file path. Required unless --inplace.",
-        writable=True,
+        help="Output .h5ad/.zarr path. Required unless --inplace.",
+        dir_okay=True,
+        file_okay=True,
     ),
     inplace: bool = typer.Option(
         False,
@@ -524,7 +584,12 @@ def import_sparse(
 @import_app.command("dict")
 def import_dict(
     file: Path = typer.Argument(
-        ..., help="Path to the source .h5ad file", exists=True, readable=True
+        ...,
+        help="Path to the source .h5ad/.zarr store",
+        exists=True,
+        readable=True,
+        dir_okay=True,
+        file_okay=True,
     ),
     obj: str = typer.Argument(
         ..., help="Object path to create/replace (e.g., 'uns', 'uns/metadata')"
@@ -536,8 +601,9 @@ def import_dict(
         None,
         "--output",
         "-o",
-        help="Output .h5ad file path. Required unless --inplace.",
-        writable=True,
+        help="Output .h5ad/.zarr path. Required unless --inplace.",
+        dir_okay=True,
+        file_okay=True,
     ),
     inplace: bool = typer.Option(
         False,
