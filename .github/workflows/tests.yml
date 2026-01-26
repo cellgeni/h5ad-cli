@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -23,6 +23,21 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]  # add "3.13" if you want
+        module:
+          - name: cli
+            tests: tests/test_cli.py
+          - name: export
+            tests: tests/test_export.py
+          - name: import
+            tests: tests/test_import.py
+          - name: info-read
+            tests: tests/test_info_read.py
+          - name: subset
+            tests: tests/test_subset.py
+          - name: zarr
+            tests: tests/test_zarr.py
+
+    name: tests (${{ matrix.module.name }})
 
     steps:
       - uses: actions/checkout@v4
@@ -42,29 +57,29 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run pytest -v \
+          uv run pytest -v ${{ matrix.module.tests }} \
             --cov=h5ad \
             --cov-report=term-missing \
             --cov-report=xml \
             --cov-report=html \
-            --junitxml=pytest-results.xml
+            --junitxml=pytest-results-${{ matrix.module.name }}.xml
 
       - name: Publish test results summary
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
-          files: pytest-results.xml
-          check_name: Test Results
+          files: pytest-results-${{ matrix.module.name }}.xml
+          check_name: Test Results (${{ matrix.module.name }})
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage
+          name: coverage-${{ matrix.module.name }}
           path: |
             coverage.xml
             htmlcov/
-            pytest-results.xml
+            pytest-results-${{ matrix.module.name }}.xml
           retention-days: 30
 
       - name: Upload coverage to Codecov
