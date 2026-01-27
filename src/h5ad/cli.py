@@ -48,32 +48,32 @@ def info(
         None,
         help="Entry path to inspect (e.g., 'obsm/X_pca', 'X', 'uns')",
     ),
-    types: bool = typer.Option(
+    tree: bool = typer.Option(
         False,
-        "--types",
+        "--tree",
         "-t",
-        help="Show detailed type information for all entries",
+        help="Show a tree of all entries",
     ),
     depth: int = typer.Option(
         None,
         "--depth",
         "-d",
-        help="Maximum recursion depth for type display (only with --types)",
+        help="Maximum recursion depth for tree display (only with --tree)",
     ),
 ) -> None:
     """
     Show high-level information about the .h5ad file.
 
-    Use --types to see type information for each entry.
+    Use --tree to see a tree of all entries.
     Use --entry to inspect a specific entry in detail.
 
     Examples:
         h5ad info data.h5ad
-        h5ad info --types data.h5ad
+        h5ad info --tree data.h5ad
         h5ad info obsm/X_pca data.h5ad
     """
     try:
-        show_info(file, console, show_types=types, depth=depth, entry_path=entry)
+        show_info(file, console, show_types=tree, depth=depth, entry_path=entry)
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
         raise typer.Exit(code=1)
