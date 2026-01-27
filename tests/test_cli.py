@@ -33,9 +33,9 @@ class TestInfoCommand:
         # Should not raise exception
         show_info(sample_h5ad_file, console)
 
-    def test_info_types_flag(self, sample_h5ad_file):
-        """Test info command with --types flag."""
-        result = runner.invoke(app, ["info", "--types", str(sample_h5ad_file)])
+    def test_info_tree_flag(self, sample_h5ad_file):
+        """Test info command with --tree flag."""
+        result = runner.invoke(app, ["info", "--tree", str(sample_h5ad_file)])
         assert result.exit_code == 0
         # Should show type annotations in angle brackets
         # Output may go to stdout or stderr depending on console config
@@ -43,7 +43,7 @@ class TestInfoCommand:
         assert "<" in output
         assert ">" in output
 
-    def test_info_types_short_flag(self, sample_h5ad_file):
+    def test_info_tree_short_flag(self, sample_h5ad_file):
         """Test info command with -t short flag."""
         result = runner.invoke(app, ["info", "-t", str(sample_h5ad_file)])
         assert result.exit_code == 0
@@ -53,7 +53,7 @@ class TestInfoCommand:
     def test_info_depth_flag(self, sample_h5ad_file):
         """Test info command with --depth flag."""
         result = runner.invoke(
-            app, ["info", "--types", "--depth", "1", str(sample_h5ad_file)]
+            app, ["info", "--tree", "--depth", "1", str(sample_h5ad_file)]
         )
         assert result.exit_code == 0
         output = result.stdout + (result.stderr or "")
