@@ -27,12 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
-urls = {
-    "Homepage" = "https://github.com/cellgeni/h5ad-cli",
-    "Repository" = "https://github.com/cellgeni/h5ad-cli",
-    "Documentation" = "README.md",
-    "Issues" = "https://github.com/cellgeni/h5ad-cli/issues",
-}
+
 dependencies = [
     "h5py>=3.15.1",
     "numpy>=2.3.5",
@@ -41,6 +36,12 @@ dependencies = [
     "typer>=0.20.0",
     "zarr>=3.1.5",
 ]
+
+[project.urls]
+Homepage = "https://github.com/cellgeni/h5ad-cli"
+Repository = "https://github.com/cellgeni/h5ad-cli"
+Documentation = "README.md"
+Issues = "https://github.com/cellgeni/h5ad-cli/issues"
 
 [project.optional-dependencies]
 dev = [
