@@ -1,18 +1,20 @@
 # h5ad CLI
 
-A command-line tool for exploring huge `.h5ad` (AnnData) files without loading them fully into memory. Streams data directly from disk for efficient inspection of structure, metadata, and matrices.
+A command-line tool for exploring huge AnnData stores (`.h5ad` and `.zarr`) without loading them fully into memory. Streams data directly from disk for efficient inspection of structure, metadata, and matrices.
 
 ## Features
 
-- **`info`** – Show file structure and dimensions (`n_obs × n_var`)
-- **`table`** – Export obs/var metadata to CSV with chunked streaming
-- **`subset`** – Filter h5ad files by cell/gene names (supports dense and sparse CSR/CSC matrices)
-- Memory-efficient chunked processing for large files
-- Rich terminal output with colors and progress bars
+- Streaming access to very large `.h5ad` and `.zarr` stores
+- Auto-detects `.h5ad` files vs `.zarr` directories
+- Chunked processing for dense and sparse matrices (CSR/CSC)
+- Rich terminal output with progress indicators
 
 ## Installation
 
+Using [uv](https://docs.astral.sh/uv/) (recommended):
 ```bash
+git clone https://github.com/cellgeni/h5ad-cli.git
+cd h5ad-cli
 uv sync
 ```
 
@@ -21,45 +23,27 @@ For development and testing:
 uv sync --extra dev
 ```
 
+Alternative with pip:
+```bash
+git clone https://github.com/cellgeni/h5ad-cli.git
+cd h5ad-cli
+pip install .
+```
+
+For development and testing with pip:
+```bash
+pip install -e ".[dev]"
+```
+
 See [docs/TESTING.md](docs/TESTING.md) for testing documentation.
 
-## Usage
-Invoke any subcommand via `uv run h5ad ...`:
+## Commands (Overview)
 
-```bash
-uv run h5ad --help
-```
+Run help at any level (e.g. `uv run h5ad --help`, `uv run h5ad export --help`).
 
-#### Examples
+- `info` – read-only inspection of store layout, shapes, and type hints; supports drilling into paths like `obsm/X_pca` or `uns`.
+- `subset` – stream and write a filtered copy based on obs/var name lists, preserving dense and sparse matrix encodings.
+- `export` – extract data from a store; subcommands: `dataframe` (obs/var to CSV), `array` (dense to `.npy`), `sparse` (CSR/CSC to `.mtx`), `dict` (JSON), `image` (PNG).
+- `import` – write new data into a store; subcommands: `dataframe` (CSV → obs/var), `array` (`.npy`), `sparse` (`.mtx`), `dict` (JSON).
 
-**Inspect overall structure and axis sizes:**
-```bash
-uv run h5ad info data.h5ad
-```
-
-**Export full obs metadata to CSV:**
-```bash
-uv run h5ad table data.h5ad --axis obs --out obs_metadata.csv
-```
-
-**Export selected obs columns to stdout:**
-```bash
-uv run h5ad table data.h5ad --axis obs --cols cell_type,donor
-```
-
-**Export var metadata with custom chunk size:**
-```bash
-uv run h5ad table data.h5ad --axis var --chunk-rows 5000 --out var_metadata.csv
-```
-
-**Subset by cell names:**
-```bash
-uv run h5ad subset input.h5ad output.h5ad --obs cells.txt
-```
-
-**Subset by both cells and genes:**
-```bash
-uv run h5ad subset input.h5ad output.h5ad --obs cells.txt --var genes.txt
-```
-
-All commands stream from disk, so even multi-GB `.h5ad` files remain responsive.
+See [docs/GET_STARTED.md](docs/GET_STARTED.md) for a short tutorial.

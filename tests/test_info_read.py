@@ -3,8 +3,87 @@
 import pytest
 import h5py
 import numpy as np
-from h5ad.info import axis_len, get_axis_group
+from h5ad.info import axis_len, get_axis_group, get_entry_type, format_type_info
 from h5ad.read import decode_str_array, read_categorical_column, col_chunk_as_strings
+
+
+class TestGetEntryType:
+    """Tests for get_entry_type function."""
+
+    def test_get_entry_type_dataframe(self, sample_h5ad_file):
+        """Test type detection for dataframe (obs/var)."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["obs"])
+            assert info["type"] == "dataframe"
+            assert info["export_as"] == "csv"
+
+    def test_get_entry_type_dense_matrix(self, sample_h5ad_file):
+        """Test type detection for dense matrix."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["X"])
+            assert info["type"] == "dense-matrix"
+            assert info["export_as"] == "npy"
+            assert info["shape"] == (5, 4)
+
+    def test_get_entry_type_sparse_matrix(self, sample_sparse_csr_h5ad):
+        """Test type detection for sparse matrix."""
+        with h5py.File(sample_sparse_csr_h5ad, "r") as f:
+            info = get_entry_type(f["X"])
+            assert info["type"] == "sparse-matrix"
+            assert info["export_as"] == "mtx"
+            assert info["encoding"] == "csr_matrix"
+
+    def test_get_entry_type_dict(self, sample_h5ad_file):
+        """Test type detection for dict/group."""
+        with h5py.File(sample_h5ad_file, "r") as f:
+            info = get_entry_type(f["uns"])
+            assert info["type"] == "dict"
+            assert info["export_as"] == "json"
+
+    def test_get_entry_type_1d_array(self, temp_dir):
+        """Test type detection for 1D array."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("arr", data=np.array([1, 2, 3, 4, 5]))
+        with h5py.File(file_path, "r") as f:
+            info = get_entry_type(f["arr"])
+            assert info["type"] == "array"
+            assert info["export_as"] == "npy"
+
+    def test_get_entry_type_scalar(self, temp_dir):
+        """Test type detection for scalar."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("scalar", data=42)
+        with h5py.File(file_path, "r") as f:
+            info = get_entry_type(f["scalar"])
+            assert info["type"] == "scalar"
+            assert info["export_as"] == "json"
+
+
+class TestFormatTypeInfo:
+    """Tests for format_type_info function."""
+
+    def test_format_type_info_dataframe(self):
+        """Test formatting dataframe type info."""
+        info = {"type": "dataframe", "export_as": "csv"}
+        result = format_type_info(info)
+        assert "<dataframe>" in result
+        assert "green" in result
+
+    def test_format_type_info_sparse(self):
+        """Test formatting sparse matrix type info."""
+        info = {"type": "sparse-matrix", "export_as": "mtx"}
+        result = format_type_info(info)
+        assert "<sparse-matrix>" in result
+        assert "magenta" in result
+
+    def test_format_type_info_unknown(self):
+        """Test formatting unknown type info."""
+        info = {"type": "unknown", "export_as": None}
+        result = format_type_info(info)
+        assert "<unknown>" in result
+        assert "red" in result
 
 
 class TestAxisLen:
@@ -23,10 +102,28 @@ class TestAxisLen:
             assert length == 4
 
     def test_axis_len_nonexistent(self, sample_h5ad_file):
-        """Test getting length of non-existent axis."""
+        """Test getting length of non-existent axis raises KeyError."""
         with h5py.File(sample_h5ad_file, "r") as f:
-            length = axis_len(f, "nonexistent")
-            assert length is None
+            with pytest.raises(KeyError, match="'nonexistent' not found"):
+                axis_len(f, "nonexistent")
+
+    def test_axis_len_not_a_group(self, temp_dir):
+        """Test that axis_len raises TypeError when axis is not a group."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_dataset("obs", data=np.array([1, 2, 3]))
+        with h5py.File(file_path, "r") as f:
+            with pytest.raises(TypeError, match="'obs' is not a group"):
+                axis_len(f, "obs")
+
+    def test_axis_len_missing_index(self, temp_dir):
+        """Test that axis_len raises KeyError when index dataset is missing."""
+        file_path = temp_dir / "test.h5ad"
+        with h5py.File(file_path, "w") as f:
+            f.create_group("obs")
+        with h5py.File(file_path, "r") as f:
+            with pytest.raises(KeyError, match="Index dataset 'obs_names' not found"):
+                axis_len(f, "obs")
 
 
 class TestGetAxisGroup:
@@ -148,9 +245,59 @@ class TestColChunkAsStrings:
             result = col_chunk_as_strings(f["obs"], "cell_type", 0, 4, cache)
             assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
 
-    def test_col_chunk_unsupported(self, sample_h5ad_file):
-        """Test reading unsupported column."""
+    def test_col_chunk_not_found(self, sample_h5ad_file):
+        """Test reading non-existent column."""
         with h5py.File(sample_h5ad_file, "r") as f:
             cache = {}
-            with pytest.raises(RuntimeError, match="Unsupported column"):
+            with pytest.raises(RuntimeError, match="not found in group"):
                 col_chunk_as_strings(f["obs"], "nonexistent", 0, 5, cache)
+
+
+class TestLegacyV010Support:
+    """Tests for legacy v0.1.0 format support."""
+
+    def test_get_entry_type_legacy_categorical(self, sample_legacy_v010_h5ad):
+        """Test type detection for legacy categorical column (v0.1.0)."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            info = get_entry_type(f["obs"]["cell_type"])
+            assert info["type"] == "categorical"
+            assert info["version"] == "0.1.0"
+            assert "Legacy" in info["details"]
+
+    def test_get_entry_type_legacy_dataframe(self, sample_legacy_v010_h5ad):
+        """Test type detection for legacy dataframe (v0.1.0)."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            info = get_entry_type(f["obs"])
+            assert info["type"] == "dataframe"
+            assert info["version"] == "0.1.0"
+            assert "legacy" in info["details"].lower()
+
+    def test_read_legacy_categorical_column(self, sample_legacy_v010_h5ad):
+        """Test reading legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = read_categorical_column(
+                f["obs"]["cell_type"], 0, 4, cache, f["obs"]
+            )
+            assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
+
+    def test_col_chunk_legacy_categorical(self, sample_legacy_v010_h5ad):
+        """Test col_chunk_as_strings with legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "cell_type", 0, 4, cache)
+            assert result == ["TypeA", "TypeB", "TypeA", "TypeC"]
+
+    def test_col_chunk_legacy_numeric(self, sample_legacy_v010_h5ad):
+        """Test col_chunk_as_strings with legacy numeric column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "n_counts", 0, 4, cache)
+            assert result == ["100", "200", "150", "300"]
+
+    def test_legacy_categorical_slice(self, sample_legacy_v010_h5ad):
+        """Test reading slice of legacy categorical column."""
+        with h5py.File(sample_legacy_v010_h5ad, "r") as f:
+            cache = {}
+            result = col_chunk_as_strings(f["obs"], "cell_type", 1, 3, cache)
+            assert result == ["TypeB", "TypeA"]
