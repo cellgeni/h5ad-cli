@@ -47,3 +47,11 @@ Run help at any level (e.g. `uv run h5ad --help`, `uv run h5ad export --help`).
 - `import` – write new data into a store; subcommands: `dataframe` (CSV → obs/var), `array` (`.npy`), `sparse` (`.mtx`), `dict` (JSON).
 
 See [docs/GET_STARTED.md](docs/GET_STARTED.md) for a short tutorial.
+
+## Docker
+
+A docker image is available on QUAY: `quay.io/cellgeni/h5ad-cli:latest`. Pull and run with:
+
+```bash
+docker run --rm -it -v /path/to/data:/data quay.io/cellgeni/h5ad-cli:latest h5ad info /data/your_file.h5ad
+```
