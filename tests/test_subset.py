@@ -484,7 +484,7 @@ class TestSubsetH5ad:
 
             uns = f.create_group("uns")
             vlen = h5py.string_dtype(encoding="utf-8")
-            uns.create_dataset("labels", data=np.array(["a", "b", "c"]), dtype=vlen)
+            uns.create_dataset("labels", data=["a", "b", "c"], dtype=vlen)
             meta = uns.create_group("meta")
             meta.create_dataset("method", data="test", dtype=vlen)
 
@@ -513,6 +513,27 @@ class TestSubsetH5ad:
             if isinstance(method, bytes):
                 method = method.decode("utf-8")
             assert method == "test"
+
+    def test_subset_h5ad_inplace(self, sample_h5ad_file, temp_dir):
+        """Test subsetting with --inplace behavior."""
+        obs_file = temp_dir / "obs_names.txt"
+        obs_file.write_text("cell_1\ncell_3\n")
+
+        console = Console(stderr=True)
+
+        subset_h5ad(
+            file=sample_h5ad_file,
+            output=None,
+            obs_file=obs_file,
+            var_file=None,
+            chunk_rows=1024,
+            console=console,
+            inplace=True,
+        )
+
+        with h5py.File(sample_h5ad_file, "r") as f:
+            assert f["obs"]["obs_names"].shape[0] == 2
+            assert f["X"].shape[0] == 2
 
     def test_subset_h5ad_sparse_entries(self, temp_dir):
         """Test sparse matrices in layers, obsm, varm, obsp, and varp."""
