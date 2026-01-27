@@ -121,7 +121,7 @@ wc -l barcodes.txt  # 257 barcodes.txt
 
 Now you can use this list to create a subset `.h5ad` file:
 ```bash
-uv run h5ad subset visium.h5ad cortex2.h5ad --obs barcodes.txt
+uv run h5ad subset visium.h5ad --output cortex2.h5ad --obs barcodes.txt
 ```
 
 Check the result:
