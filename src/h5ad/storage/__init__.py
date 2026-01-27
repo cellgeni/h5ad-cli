@@ -235,6 +235,10 @@ def copy_dataset(src: Any, dst_group: Any, name: str) -> Any:
 
 
 def copy_tree(src_obj: Any, dst_group: Any, name: str, *, exclude: Iterable[str] = ()) -> Any:
+    if is_hdf5_group(dst_group) and (is_hdf5_group(src_obj) or is_hdf5_dataset(src_obj)):
+        if not exclude:
+            dst_group.copy(src_obj, dst_group, name)
+            return dst_group[name]
     if is_dataset(src_obj):
         return copy_dataset(src_obj, dst_group, name)
     if not is_group(src_obj):
