@@ -367,7 +367,15 @@ class TestSubsetCommand:
 
         output = temp_dir / "subset.h5ad"
         result = runner.invoke(
-            app, ["subset", str(sample_h5ad_file), str(output), "--obs", str(obs_file)]
+            app,
+            [
+                "subset",
+                str(sample_h5ad_file),
+                "--output",
+                str(output),
+                "--obs",
+                str(obs_file),
+            ],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -379,7 +387,15 @@ class TestSubsetCommand:
 
         output = temp_dir / "subset.h5ad"
         result = runner.invoke(
-            app, ["subset", str(sample_h5ad_file), str(output), "--var", str(var_file)]
+            app,
+            [
+                "subset",
+                str(sample_h5ad_file),
+                "--output",
+                str(output),
+                "--var",
+                str(var_file),
+            ],
         )
         assert result.exit_code == 0
         assert output.exists()
@@ -398,6 +414,7 @@ class TestSubsetCommand:
             [
                 "subset",
                 str(sample_h5ad_file),
+                "--output",
                 str(output),
                 "--obs",
                 str(obs_file),
@@ -411,7 +428,9 @@ class TestSubsetCommand:
     def test_subset_command_no_filters(self, sample_h5ad_file, temp_dir):
         """Test subset command without any filters (should fail)."""
         output = temp_dir / "subset.h5ad"
-        result = runner.invoke(app, ["subset", str(sample_h5ad_file), str(output)])
+        result = runner.invoke(
+            app, ["subset", str(sample_h5ad_file), "--output", str(output)]
+        )
         assert result.exit_code == 1
         # Check both stdout and stderr since Console uses stderr=True
         output_text = result.stdout + result.stderr
@@ -428,6 +447,7 @@ class TestSubsetCommand:
             [
                 "subset",
                 str(sample_h5ad_file),
+                "--output",
                 str(output),
                 "--obs",
                 str(obs_file),
@@ -449,6 +469,7 @@ class TestSubsetCommand:
             [
                 "subset",
                 str(sample_sparse_csr_h5ad),
+                "--output",
                 str(output),
                 "--obs",
                 str(obs_file),
