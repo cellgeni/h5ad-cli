@@ -57,7 +57,9 @@ def show_info(
                 # Only process Groups, skip Datasets like X
                 if is_group(obj):
                     sub_keys = [
-                        k for k in obj.keys() if k not in ("_index", "__categories")
+                        k
+                        for k in obj.keys()
+                        if k not in ("_index", "__categories", "obs_names", "var_names")
                     ]
                     if sub_keys and key != "X":
                         rich.print(
@@ -126,7 +128,11 @@ def _show_types_tree(
         obj = f[key]
         # Skip empty groups
         if is_group(obj):
-            children = [k for k in obj.keys() if k not in ("_index", "__categories")]
+            children = [
+                k
+                for k in obj.keys()
+                if k not in ("_index", "__categories", "obs_names", "var_names")
+            ]
             if not children:
                 continue
         max_depth = (
@@ -174,7 +180,11 @@ def _show_object_info(f: Any, entry_path: str, console: Console) -> None:
 
     # If it's a group, show children
     if is_group(entry):
-        children = [k for k in entry.keys() if k not in ("_index", "__categories")]
+        children = [
+            k
+            for k in entry.keys()
+            if k not in ("_index", "__categories", "obs_names", "var_names")
+        ]
         if children:
             console.print(f"\n[bold cyan]Children:[/]")
             for child_name in sorted(children):
