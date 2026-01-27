@@ -283,6 +283,34 @@ def subset_sparse_matrix_group(
     create_dataset(group, "indptr", data=np.array(new_indptr, dtype=indptr.dtype))
 
 
+def subset_matrix_entry(
+    obj: Any,
+    dst_parent: Any,
+    name: str,
+    obs_idx: Optional[np.ndarray],
+    var_idx: Optional[np.ndarray],
+    *,
+    chunk_rows: int,
+    entry_label: str,
+) -> None:
+    if is_dataset(obj):
+        subset_dense_matrix(
+            obj, dst_parent, name, obs_idx, var_idx, chunk_rows=chunk_rows
+        )
+        return
+
+    if is_group(obj):
+        enc = obj.attrs.get("encoding-type", b"")
+        if isinstance(enc, bytes):
+            enc = enc.decode("utf-8")
+        if enc in ("csr_matrix", "csc_matrix"):
+            subset_sparse_matrix_group(obj, dst_parent, name, obs_idx, var_idx)
+            return
+        raise ValueError(f"Unsupported {entry_label} encoding type: {enc}")
+
+    raise ValueError(f"Unsupported {entry_label} object type")
+
+
 def subset_h5ad(
     file: Path,
     output: Path,
@@ -371,16 +399,15 @@ def subset_h5ad(
                 tasks.append("uns")
 
             with Progress(
-                SpinnerColumn(),
+                SpinnerColumn(finished_text="[green]✓[/]"),
                 TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TaskProgressColumn(),
-                TimeElapsedColumn(),
                 console=console,
+                transient=False,
             ) as progress:
-                task_id = progress.add_task("[cyan]Subsetting...", total=len(tasks))
-
                 for task in tasks:
+                    task_id = progress.add_task(
+                        f"[cyan]Subsetting {task}...[/]", total=None
+                    )
                     if task == "obs":
                         obs_dst = dst.create_group("obs")
                         subset_axis_group(src["obs"], obs_dst, obs_idx)
@@ -400,65 +427,73 @@ def subset_h5ad(
                     elif task.startswith("layer:"):
                         key = task.split(":", 1)[1]
                         layer_src = src["layers"][key]
-                        if is_dataset(layer_src):
-                            layers_dst = _ensure_group(dst, "layers")
-                            subset_dense_matrix(
-                                layer_src,
-                                layers_dst,
-                                key,
-                                obs_idx,
-                                var_idx,
-                                chunk_rows=chunk_rows,
-                            )
-                        elif is_group(layer_src):
-                            layers_dst = _ensure_group(dst, "layers")
-                            subset_sparse_matrix_group(
-                                layer_src, layers_dst, key, obs_idx, var_idx
-                            )
+                        layers_dst = _ensure_group(dst, "layers")
+                        subset_matrix_entry(
+                            layer_src,
+                            layers_dst,
+                            key,
+                            obs_idx,
+                            var_idx,
+                            chunk_rows=chunk_rows,
+                            entry_label=f"layer:{key}",
+                        )
                     elif task.startswith("obsm:"):
                         key = task.split(":", 1)[1]
                         obsm_dst = _ensure_group(dst, "obsm")
-                        subset_dense_matrix(
-                            src["obsm"][key],
+                        obsm_obj = src["obsm"][key]
+                        subset_matrix_entry(
+                            obsm_obj,
                             obsm_dst,
                             key,
                             obs_idx,
                             None,
                             chunk_rows=chunk_rows,
+                            entry_label=f"obsm:{key}",
                         )
                     elif task.startswith("varm:"):
                         key = task.split(":", 1)[1]
                         varm_dst = _ensure_group(dst, "varm")
-                        subset_dense_matrix(
-                            src["varm"][key],
+                        varm_obj = src["varm"][key]
+                        subset_matrix_entry(
+                            varm_obj,
                             varm_dst,
                             key,
                             var_idx,
                             None,
                             chunk_rows=chunk_rows,
+                            entry_label=f"varm:{key}",
                         )
                     elif task.startswith("obsp:"):
                         key = task.split(":", 1)[1]
                         obsp_dst = _ensure_group(dst, "obsp")
-                        subset_dense_matrix(
-                            src["obsp"][key],
+                        obsp_obj = src["obsp"][key]
+                        subset_matrix_entry(
+                            obsp_obj,
                             obsp_dst,
                             key,
                             obs_idx,
                             obs_idx,
                             chunk_rows=chunk_rows,
+                            entry_label=f"obsp:{key}",
                         )
                     elif task.startswith("varp:"):
                         key = task.split(":", 1)[1]
                         varp_dst = _ensure_group(dst, "varp")
-                        subset_dense_matrix(
-                            src["varp"][key],
+                        varp_obj = src["varp"][key]
+                        subset_matrix_entry(
+                            varp_obj,
                             varp_dst,
                             key,
                             var_idx,
                             var_idx,
                             chunk_rows=chunk_rows,
+                            entry_label=f"varp:{key}",
                         )
                     elif task == "uns":
                         copy_tree(src["uns"], dst, "uns")
-                    progress.advance(task_id)
+                    progress.update(
+                        task_id,
+                        description=f"[green]Subsetting {task}[/]",
+                        completed=1,
+                        total=1,
+                    )
