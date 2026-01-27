@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from typing import Optional, Set, Tuple, List, Dict, Any
 
 import numpy as np
@@ -22,6 +23,7 @@ from h5ad.storage import (
     copy_attrs,
     copy_tree,
     dataset_create_kwargs,
+    detect_backend,
     is_dataset,
     is_group,
     is_zarr_group,
@@ -313,12 +315,13 @@ def subset_matrix_entry(
 
 def subset_h5ad(
     file: Path,
-    output: Path,
+    output: Optional[Path],
     obs_file: Optional[Path],
     var_file: Optional[Path],
     *,
     chunk_rows: int = 1024,
     console: Console,
+    inplace: bool = False,
 ) -> None:
     obs_keep: Optional[Set[str]] = None
     if obs_file is not None:
@@ -333,8 +336,24 @@ def subset_h5ad(
     if obs_keep is None and var_keep is None:
         raise ValueError("At least one of --obs or --var must be provided.")
 
+    if not inplace and output is None:
+        raise ValueError("Output file is required unless --inplace is specified.")
+
+    if inplace:
+        src_backend = detect_backend(file)
+        if src_backend == "zarr":
+            base_name = file.stem if file.suffix else file.name
+            tmp_path = file.with_name(f"{base_name}.subset-tmp.zarr")
+        else:
+            tmp_path = file.with_name(f"{file.name}.subset-tmp")
+        if tmp_path.exists():
+            raise FileExistsError(f"Temporary path already exists: {tmp_path}")
+        dst_path = tmp_path
+    else:
+        dst_path = output
+
     with console.status("[magenta]Opening files...[/]"):
-        with open_store(file, "r") as src_store, open_store(output, "w") as dst_store:
+        with open_store(file, "r") as src_store, open_store(dst_path, "w") as dst_store:
             src = src_store.root
             dst = dst_store.root
 
@@ -497,3 +516,14 @@ def subset_h5ad(
                         completed=1,
                         total=1,
                     )
+
+    if inplace:
+        if file.exists():
+            if file.is_dir():
+                shutil.rmtree(file)
+            else:
+                file.unlink()
+        if dst_path.is_dir():
+            shutil.move(str(dst_path), str(file))
+        else:
+            dst_path.replace(file)

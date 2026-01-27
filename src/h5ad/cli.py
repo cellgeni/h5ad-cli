@@ -92,8 +92,18 @@ def subset(
         dir_okay=True,
         file_okay=True,
     ),
-    output: Path = typer.Argument(
-        ..., help="Output .h5ad/.zarr", dir_okay=True, file_okay=True
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Output .h5ad/.zarr path. Required unless --inplace.",
+        dir_okay=True,
+        file_okay=True,
+    ),
+    inplace: bool = typer.Option(
+        False,
+        "--inplace",
+        help="Modify source file directly.",
     ),
     obs: Optional[Path] = typer.Option(
         None,
@@ -125,6 +135,13 @@ def subset(
         )
         raise typer.Exit(code=1)
 
+    if not inplace and output is None:
+        console.print(
+            "[bold red]Error:[/] Output file is required. "
+            "Use --output/-o or --inplace.",
+        )
+        raise typer.Exit(code=1)
+
     try:
         subset_h5ad(
             file=file,
@@ -133,6 +150,7 @@ def subset(
             var_file=var,
             chunk_rows=chunk_rows,
             console=console,
+            inplace=inplace,
         )
     except Exception as e:
         console.print(f"[bold red]Error:[/] {e}")
