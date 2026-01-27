@@ -128,6 +128,17 @@ Check the result:
 ```bash
 uv run h5ad info cortex2.h5ad
 ```
+```
+An object with n_obs × n_var: 257 × 18078
+        obs:    array_col, array_row, cluster, in_tissue, leiden, log1p_n_genes_by_counts, log1p_total_counts, log1p_total_counts_mt, n_counts, n_genes_by_counts, 
+pct_counts_in_top_100_genes, pct_counts_in_top_200_genes, pct_counts_in_top_500_genes, pct_counts_in_top_50_genes, pct_counts_mt, total_counts, total_counts_mt
+        var:    feature_types, gene_ids, genome, highly_variable, highly_variable_rank, log1p_mean_counts, log1p_total_counts, mean_counts, means, mt, n_cells, n_cells_by_counts, 
+pct_dropout_by_counts, total_counts, variances, variances_norm
+        obsm:   X_pca, X_umap, spatial
+        varm:   PCs
+        obsp:   connectivities, distances
+        uns:    cluster_colors, hvg, leiden, leiden_colors, neighbors, pca, rank_genes_groups, spatial, umap
+```
 
 ## Import or replace data
 You can also import new data into an existing store. For example, let's replace the `obs` dataframe with a modified version. First, leave only first 5 columns in `cells.csv`:
@@ -135,12 +146,44 @@ You can also import new data into an existing store. For example, let's replace 
 cut -d ',' -f 1-5 cells.csv > cells1to5.csv
 ```
 
-Now import it back into `cortex2.h5ad`:
+Now import it back into `cortex2.h5ad` with the `_index` column as index:
 ```bash
-uv run h5ad import dataframe visium.h5ad obs cells1to5.csv
+uv run h5ad import dataframe visium.h5ad obs cells1to5.csv --index-column _index --output visium_obs1to5.h5ad
 ```
 
 Check the updated `obs` structure:
 ```bash
-uv run h5ad info visium.h5ad obs
+uv run h5ad info visium_obs1to5.h5ad
+```
+```
+An object with n_obs × n_var: 2688 × 18078
+        obs:    array_col, array_row, cluster, in_tissue
+        var:    feature_types, gene_ids, genome, highly_variable, highly_variable_rank, log1p_mean_counts, log1p_total_counts, mean_counts, means, mt, n_cells, n_cells_by_counts, 
+pct_dropout_by_counts, total_counts, variances, variances_norm
+        obsm:   X_pca, X_umap, spatial
+        varm:   PCs
+        obsp:   connectivities, distances
+        uns:    cluster_colors, hvg, leiden, leiden_colors, neighbors, pca, rank_genes_groups, spatial, umap
+        raw:    X, var
+```
+
+You can also import the data into existing file:
+```bash
+uv run h5ad import dataframe visium.h5ad obs cells1to5.csv --index-column _index --inplace
+```
+
+Check the updated `obs` structure:
+```bash
+uv run h5ad info visium.h5ad
+```
+```
+An object with n_obs × n_var: 2688 × 18078
+        obs:    array_col, array_row, cluster, in_tissue
+        var:    feature_types, gene_ids, genome, highly_variable, highly_variable_rank, log1p_mean_counts, log1p_total_counts, mean_counts, means, mt, n_cells, n_cells_by_counts, 
+pct_dropout_by_counts, total_counts, variances, variances_norm
+        obsm:   X_pca, X_umap, spatial
+        varm:   PCs
+        obsp:   connectivities, distances
+        uns:    cluster_colors, hvg, leiden, leiden_colors, neighbors, pca, rank_genes_groups, spatial, umap
+        raw:    X, var
 ```
