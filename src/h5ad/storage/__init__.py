@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 import shutil
+import warnings
 
 import h5py
 
@@ -13,6 +14,10 @@ except Exception:  # pragma: no cover - optional dependency
     zarr = None
 
 import numpy as np
+
+
+ROOT_ENCODING_TYPE = "anndata"
+ROOT_ENCODING_VERSION = "0.1.0"
 
 
 @dataclass
@@ -96,9 +101,55 @@ def open_store(path: Path, mode: str) -> Store:
     if backend == "zarr":
         _require_zarr()
         root = zarr.open_group(str(path), mode=mode)
+        if _is_writable_mode(mode):
+            ensure_anndata_root_attrs(root)
+        else:
+            warn_if_missing_anndata_root_attrs(root, path=path)
         return Store(backend="zarr", root=root, path=path)
     root = h5py.File(path, mode)
+    if _is_writable_mode(mode):
+        ensure_anndata_root_attrs(root)
+    else:
+        warn_if_missing_anndata_root_attrs(root, path=path)
     return Store(backend="hdf5", root=root, path=path)
+
+
+def _decode_attr(value: Any) -> Any:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
+
+
+def _is_writable_mode(mode: str) -> bool:
+    return any(flag in mode for flag in ("w", "a", "+", "x"))
+
+
+def has_valid_anndata_root_attrs(root: Any) -> bool:
+    enc_type = _decode_attr(root.attrs.get("encoding-type", None))
+    enc_ver = _decode_attr(root.attrs.get("encoding-version", None))
+    return enc_type == ROOT_ENCODING_TYPE and enc_ver == ROOT_ENCODING_VERSION
+
+
+def ensure_anndata_root_attrs(root: Any) -> None:
+    root.attrs["encoding-type"] = ROOT_ENCODING_TYPE
+    root.attrs["encoding-version"] = ROOT_ENCODING_VERSION
+
+
+def warn_if_missing_anndata_root_attrs(root: Any, *, path: Path) -> None:
+    if has_valid_anndata_root_attrs(root):
+        return
+
+    enc_type = _decode_attr(root.attrs.get("encoding-type", None))
+    enc_ver = _decode_attr(root.attrs.get("encoding-version", None))
+    warnings.warn(
+        (
+            f"Store '{path}' root is missing required AnnData attrs "
+            f"(encoding-type='anndata', encoding-version='0.1.0'). "
+            f"Found encoding-type={enc_type!r}, encoding-version={enc_ver!r}."
+        ),
+        UserWarning,
+        stacklevel=2,
+    )
 
 
 def _normalize_attr_value(value: Any, target_backend: str) -> Any:
@@ -106,9 +157,7 @@ def _normalize_attr_value(value: Any, target_backend: str) -> Any:
         if isinstance(value, bytes):
             return value.decode("utf-8")
         if isinstance(value, (list, tuple)):
-            return [
-                v.decode("utf-8") if isinstance(v, bytes) else v for v in value
-            ]
+            return [v.decode("utf-8") if isinstance(v, bytes) else v for v in value]
         if isinstance(value, np.ndarray):
             if value.dtype.kind in ("S", "O"):
                 return [
@@ -187,7 +236,9 @@ def create_dataset(
         if zarr_format == 3:
             kwargs = dict(kwargs)
             kwargs.pop("compressor", None)
-        elif zarr_format == 2 and "compressors" in kwargs and "compressor" not in kwargs:
+        elif (
+            zarr_format == 2 and "compressors" in kwargs and "compressor" not in kwargs
+        ):
             kwargs = dict(kwargs)
             compressors = kwargs.pop("compressors")
             if isinstance(compressors, (list, tuple)) and len(compressors) == 1:
@@ -234,8 +285,12 @@ def copy_dataset(src: Any, dst_group: Any, name: str) -> Any:
     return ds
 
 
-def copy_tree(src_obj: Any, dst_group: Any, name: str, *, exclude: Iterable[str] = ()) -> Any:
-    if is_hdf5_group(dst_group) and (is_hdf5_group(src_obj) or is_hdf5_dataset(src_obj)):
+def copy_tree(
+    src_obj: Any, dst_group: Any, name: str, *, exclude: Iterable[str] = ()
+) -> Any:
+    if is_hdf5_group(dst_group) and (
+        is_hdf5_group(src_obj) or is_hdf5_dataset(src_obj)
+    ):
         if not exclude:
             dst_group.copy(src_obj, dst_group, name)
             return dst_group[name]
@@ -256,6 +311,9 @@ def copy_tree(src_obj: Any, dst_group: Any, name: str, *, exclude: Iterable[str]
 
 
 def copy_store_contents(src_root: Any, dst_root: Any) -> None:
+    target_backend = "zarr" if is_zarr_group(dst_root) else "hdf5"
+    copy_attrs(src_root.attrs, dst_root.attrs, target_backend=target_backend)
+    ensure_anndata_root_attrs(dst_root)
     for key in src_root.keys():
         copy_tree(src_root[key], dst_root, key)
 
