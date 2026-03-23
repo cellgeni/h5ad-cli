@@ -3,6 +3,8 @@
 import pytest
 import csv
 from pathlib import Path
+import h5py
+import numpy as np
 from typer.testing import CliRunner
 from h5ad.cli import app
 from h5ad.commands.info import show_info
@@ -315,6 +317,81 @@ class TestExportDataframeCommand:
             assert "obs_names" in header
             assert "cell_type" in header
             assert "n_counts" not in header
+
+    def test_export_dataframe_multi_categorical_columns(self, temp_dir):
+        """Test exporting multiple categorical columns keeps each column's values."""
+        file_path = temp_dir / "categorical_obs.h5ad"
+
+        with h5py.File(file_path, "w") as f:
+            obs = f.create_group("obs")
+            obs.attrs["_index"] = "_index"
+            obs.create_dataset(
+                "_index",
+                data=np.array(["cell1", "cell2", "cell3", "cell4"], dtype="S"),
+            )
+
+            age = obs.create_group("age")
+            age.attrs["encoding-type"] = "categorical"
+            age.attrs["encoding-version"] = "0.2.0"
+            age.attrs["ordered"] = np.False_
+            age.create_dataset(
+                "categories",
+                data=np.array(["nan", "9.2", "11.0"], dtype=object),
+            )
+            age.create_dataset("codes", data=np.array([0, 1, 2, 0], dtype=np.int8))
+
+            sample_id = obs.create_group("sample_ID")
+            sample_id.attrs["encoding-type"] = "categorical"
+            sample_id.attrs["encoding-version"] = "0.2.0"
+            sample_id.attrs["ordered"] = np.False_
+            sample_id.create_dataset(
+                "categories",
+                data=np.array(["nan", "XHU:307", "BRC2243"], dtype=object),
+            )
+            sample_id.create_dataset(
+                "codes", data=np.array([0, 1, 2, 0], dtype=np.int8)
+            )
+
+            cell_type = obs.create_group("cell_type")
+            cell_type.attrs["encoding-type"] = "categorical"
+            cell_type.attrs["encoding-version"] = "0.2.0"
+            cell_type.attrs["ordered"] = np.False_
+            cell_type.create_dataset(
+                "categories",
+                data=np.array(
+                    ["nan", "Forebrain neuronal IPC", "β-cell"], dtype=object
+                ),
+            )
+            cell_type.create_dataset(
+                "codes", data=np.array([0, 1, 2, 0], dtype=np.int8)
+            )
+
+            var = f.create_group("var")
+            var.attrs["_index"] = "var_names"
+            var.create_dataset("var_names", data=np.array(["g1", "g2"], dtype="S"))
+            f.create_dataset("X", data=np.ones((4, 2), dtype=np.float32))
+
+        result = runner.invoke(
+            app,
+            [
+                "export",
+                "dataframe",
+                str(file_path),
+                "obs",
+                "-c",
+                "age,sample_ID,cell_type",
+                "--head",
+                "4",
+            ],
+        )
+
+        assert result.exit_code == 0
+        rows = list(csv.reader(result.stdout.splitlines()))
+        assert rows[0] == ["_index", "age", "sample_ID", "cell_type"]
+        assert rows[1] == ["cell1", "nan", "nan", "nan"]
+        assert rows[2] == ["cell2", "9.2", "XHU:307", "Forebrain neuronal IPC"]
+        assert rows[3] == ["cell3", "11.0", "BRC2243", "β-cell"]
+        assert rows[4] == ["cell4", "nan", "nan", "nan"]
 
     def test_export_dataframe_invalid_axis(self, sample_h5ad_file, temp_dir):
         """Test export dataframe with invalid axis."""

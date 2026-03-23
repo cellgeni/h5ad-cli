@@ -140,7 +140,7 @@ pct_dropout_by_counts, total_counts, variances, variances_norm
         uns:    cluster_colors, hvg, leiden, leiden_colors, neighbors, pca, rank_genes_groups, spatial, umap
 ```
 
-## Import or replace data
+## 5 Import or replace data
 You can also import new data into an existing store. For example, let's replace the `obs` dataframe with a modified version. First, leave only first 5 columns in `cells.csv`:
 ```bash
 cut -d ',' -f 1-5 cells.csv > cells1to5.csv
