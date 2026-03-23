@@ -358,7 +358,9 @@ class TestExportDataframeCommand:
             cell_type.attrs["ordered"] = np.False_
             cell_type.create_dataset(
                 "categories",
-                data=np.array(["nan", "Forebrain neuronal IPC", "β-cell"], dtype=object),
+                data=np.array(
+                    ["nan", "Forebrain neuronal IPC", "β-cell"], dtype=object
+                ),
             )
             cell_type.create_dataset(
                 "codes", data=np.array([0, 1, 2, 0], dtype=np.int8)
