@@ -284,6 +284,28 @@ class TestSubsetSparseMatrixGroup:
 class TestSubsetH5ad:
     """Integration tests for subset_h5ad function."""
 
+    def test_subset_h5ad_creates_optional_empty_groups(self, sample_h5ad_file, temp_dir):
+        """Subset output should include optional AnnData groups even if absent in source."""
+        obs_file = temp_dir / "obs_names.txt"
+        obs_file.write_text("cell_1\ncell_3\n")
+
+        output = temp_dir / "subset.h5ad"
+        console = Console(stderr=True)
+
+        subset_h5ad(
+            file=sample_h5ad_file,
+            output=output,
+            obs_file=obs_file,
+            var_file=None,
+            chunk_rows=1024,
+            console=console,
+        )
+
+        with h5py.File(output, "r") as f:
+            for key in ("layers", "obsm", "obsp", "varm", "varp"):
+                assert key in f
+                assert isinstance(f[key], h5py.Group)
+
     def test_subset_h5ad_obs_only(self, sample_h5ad_file, temp_dir):
         """Test subsetting h5ad file by obs only."""
         obs_file = temp_dir / "obs_names.txt"
