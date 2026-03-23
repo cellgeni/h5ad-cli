@@ -186,6 +186,14 @@ class TestDecodeStrArray:
         assert result[0] == "hello"
         assert result[1] == "world"
 
+    def test_decode_non_ascii_bytes_array(self):
+        """Test decoding non-ASCII UTF-8 bytes without crashing."""
+        arr = np.array(
+            ["β-cell".encode("utf-8"), "μglia".encode("utf-8")], dtype=object
+        )
+        result = decode_str_array(arr)
+        assert list(result) == ["β-cell", "μglia"]
+
 
 class TestReadCategoricalColumn:
     """Tests for read_categorical_column function."""
@@ -251,6 +259,38 @@ class TestColChunkAsStrings:
             cache = {}
             with pytest.raises(RuntimeError, match="not found in group"):
                 col_chunk_as_strings(f["obs"], "nonexistent", 0, 5, cache)
+
+    def test_col_chunk_multiple_categorical_columns_keep_values(self, temp_dir):
+        """Test categorical cache does not leak across columns."""
+        file_path = temp_dir / "multi_categorical.h5ad"
+
+        with h5py.File(file_path, "w") as f:
+            obs = f.create_group("obs")
+            obs.attrs["_index"] = "obs_names"
+            obs.create_dataset(
+                "obs_names", data=np.array(["c1", "c2", "c3"], dtype="S")
+            )
+
+            age = obs.create_group("age")
+            age.attrs["encoding-type"] = "categorical"
+            age.create_dataset("categories", data=np.array(["5.0", "6.0"], dtype="S"))
+            age.create_dataset("codes", data=np.array([0, 1, 0], dtype=np.int8))
+
+            cell_type = obs.create_group("cell_type")
+            cell_type.attrs["encoding-type"] = "categorical"
+            cell_type.create_dataset(
+                "categories",
+                data=np.array(["Neuron", "β-cell"], dtype=object),
+            )
+            cell_type.create_dataset("codes", data=np.array([1, 0, 1], dtype=np.int8))
+
+        with h5py.File(file_path, "r") as f:
+            cache = {}
+            age_values = col_chunk_as_strings(f["obs"], "age", 0, 3, cache)
+            cell_type_values = col_chunk_as_strings(f["obs"], "cell_type", 0, 3, cache)
+
+            assert age_values == ["5.0", "6.0", "5.0"]
+            assert cell_type_values == ["β-cell", "Neuron", "β-cell"]
 
 
 class TestLegacyV010Support:
