@@ -143,8 +143,8 @@ def warn_if_missing_anndata_root_attrs(root: Any, *, path: Path) -> None:
     enc_ver = _decode_attr(root.attrs.get("encoding-version", None))
     warnings.warn(
         (
-            f"Store '{path}' root is missing required AnnData attrs "
-            f"(encoding-type='anndata', encoding-version='0.1.0'). "
+            f"Store '{path}' root has missing or invalid AnnData attrs "
+            f"(encoding-type={ROOT_ENCODING_TYPE!r}, encoding-version={ROOT_ENCODING_VERSION!r}). "
             f"Found encoding-type={enc_type!r}, encoding-version={enc_ver!r}."
         ),
         UserWarning,
