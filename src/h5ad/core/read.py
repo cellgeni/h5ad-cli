@@ -9,21 +9,49 @@ from h5ad.storage import is_group, is_dataset, is_hdf5_dataset
 
 
 def decode_str_array(array: np.ndarray) -> np.ndarray:
-    if np.issubdtype(array.dtype, np.bytes_):
-        return array.astype("U")
-    if array.dtype.kind == "O":
-        return array.astype(str)
-    return array.astype(str)
+    arr = np.asarray(array)
+
+    if np.issubdtype(arr.dtype, np.bytes_):
+        flat = arr.reshape(-1)
+        decoded = [
+            b.decode("utf-8", errors="replace") if isinstance(b, (bytes, np.bytes_)) else str(b)
+            for b in flat
+        ]
+        return np.asarray(decoded, dtype=str).reshape(arr.shape)
+
+    if arr.dtype.kind == "O":
+        flat = arr.reshape(-1)
+        decoded = [
+            v.decode("utf-8", errors="replace") if isinstance(v, (bytes, np.bytes_)) else str(v)
+            for v in flat
+        ]
+        return np.asarray(decoded, dtype=str).reshape(arr.shape)
+
+    return arr.astype(str)
+
+
+def _categorical_cache_key(col: Any, parent_group: Any | None = None) -> str:
+    col_name = getattr(col, "name", None)
+    if isinstance(col_name, str) and col_name:
+        return col_name
+
+    if parent_group is not None:
+        parent_name = getattr(parent_group, "name", "")
+        rel_name = getattr(col, "path", "")
+        if parent_name or rel_name:
+            return f"{parent_name}/{rel_name}"
+
+    return repr(col)
 
 
 def read_categorical_column(
     col: Any,
     start: int,
     end: int,
-    cache: Dict[int, np.ndarray],
+    cache: Dict[str, np.ndarray],
     parent_group: Any | None = None,
 ) -> List[str]:
-    key = id(col)
+    key = _categorical_cache_key(col, parent_group)
 
     if is_group(col):
         if key not in cache:
@@ -72,7 +100,7 @@ def col_chunk_as_strings(
     col_name: str,
     start: int,
     end: int,
-    cat_cache: Dict[int, np.ndarray],
+    cat_cache: Dict[str, np.ndarray],
 ) -> List[str]:
     if col_name not in group:
         raise RuntimeError(f"Column {col_name!r} not found in group {group.name}")
