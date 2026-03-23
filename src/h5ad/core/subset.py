@@ -44,6 +44,11 @@ def _group_get(parent: Any, key: str) -> Any | None:
     return parent[key] if key in parent else None
 
 
+def _ensure_optional_anndata_groups(dst: Any) -> None:
+    for key in ("layers", "obsm", "obsp", "varm", "varp"):
+        _ensure_group(dst, key)
+
+
 def _decode_attr(value: Any) -> Any:
     if isinstance(value, bytes):
         return value.decode("utf-8")
@@ -516,6 +521,8 @@ def subset_h5ad(
                         completed=1,
                         total=1,
                     )
+
+            _ensure_optional_anndata_groups(dst)
 
     if inplace:
         if file.exists():
