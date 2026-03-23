@@ -14,7 +14,11 @@ def decode_str_array(array: np.ndarray) -> np.ndarray:
     if np.issubdtype(arr.dtype, np.bytes_):
         flat = arr.reshape(-1)
         decoded = [
-            b.decode("utf-8", errors="replace") if isinstance(b, (bytes, np.bytes_)) else str(b)
+            (
+                b.decode("utf-8", errors="replace")
+                if isinstance(b, (bytes, np.bytes_))
+                else str(b)
+            )
             for b in flat
         ]
         return np.asarray(decoded, dtype=str).reshape(arr.shape)
@@ -22,7 +26,11 @@ def decode_str_array(array: np.ndarray) -> np.ndarray:
     if arr.dtype.kind == "O":
         flat = arr.reshape(-1)
         decoded = [
-            v.decode("utf-8", errors="replace") if isinstance(v, (bytes, np.bytes_)) else str(v)
+            (
+                v.decode("utf-8", errors="replace")
+                if isinstance(v, (bytes, np.bytes_))
+                else str(v)
+            )
             for v in flat
         ]
         return np.asarray(decoded, dtype=str).reshape(arr.shape)
@@ -81,9 +89,7 @@ def read_categorical_column(
                         f"Cannot find categories for legacy column {col.name}"
                     )
             else:
-                raise KeyError(
-                    f"Cannot find categories for legacy column {col.name}"
-                )
+                raise KeyError(f"Cannot find categories for legacy column {col.name}")
             cats = decode_str_array(cats)
             cache[key] = np.asarray(cats, dtype=str)
         cats = cache[key]
@@ -131,10 +137,6 @@ def col_chunk_as_strings(
             values = decode_str_array(np.asarray(values))
             return ["" if m else str(v) for v, m in zip(values, mask)]
 
-        raise ValueError(
-            f"Unsupported group encoding {enc!r} for column {col_name!r}"
-        )
+        raise ValueError(f"Unsupported group encoding {enc!r} for column {col_name!r}")
 
-    raise TypeError(
-        f"Unsupported column type for {col_name!r} in group {group.name}"
-    )
+    raise TypeError(f"Unsupported column type for {col_name!r} in group {group.name}")
