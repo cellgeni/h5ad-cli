@@ -24,7 +24,7 @@ RUN uv sync
 
 # Create separate venv for csvkit to avoid dependency conflicts
 RUN uv venv $VENV --python 3.12 && \
-    uv pip install --python $VENV/bin/python csvkit
+    uv pip install --python $VENV/bin/python csvkit duckdb-cli
 
 # Put the project venv on PATH so `h5ad` is directly runnable
 ENV PATH="/cli/.venv/bin:${VENV}/bin:${PATH}"
